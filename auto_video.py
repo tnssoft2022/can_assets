@@ -12,7 +12,7 @@
 
 ตัวเลือก:
     --source DIR      โฟลเดอร์หลักที่เก็บทรัพย์ทั้งหมด (ค่าเริ่มต้นอ่านจาก settings.json → "source_dir")
-    --style S         luxury / modern / minimal (ค่าเริ่มต้น modern)
+    --style S         modern (ค่าเริ่มต้น) / luxury / minimal / bold / nature / corporate / night
     --formats F       vertical,horizontal (ค่าเริ่มต้นทั้งสองแบบ)
     --max-images N    จำนวนรูปสูงสุดต่อวิดีโอ (ค่าเริ่มต้น 8)
     --music FILE      ไฟล์เพลงประกอบ

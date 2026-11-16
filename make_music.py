@@ -8,6 +8,10 @@
 - luxury  : เปียโนนุ่ม ๆ คอร์ดแจ๊ส ช้า ไม่มีกลอง
 - modern  : จังหวะสนุก เบส + อาร์เปจจิโอ + กลองเบา ๆ
 - minimal : กีตาร์ดีดเบา ๆ (สังเคราะห์) + เชคเกอร์
+- bold    : จังหวะเร็ว คีย์ไมเนอร์ เบสหนัก + กลอง
+- nature  : กีตาร์ดีดช้า ๆ อบอุ่น ไม่มีกลอง
+- corporate: เปียโนจังหวะกลาง + เชคเกอร์ เรียบ ๆ
+- night   : เปียโนคอร์ดไมเนอร์ 7 ช้า ๆ บรรยากาศกลางคืน
 
 ความยาวประมาณ 64 วินาที (ระบบวนเพลงเองถ้าวิดีโอยาวกว่า) — ทำเสียงเบาลงอัตโนมัติตอนมีเสียงพากย์
 """
@@ -52,6 +56,26 @@ STYLES = {
         "bpm": 88, "bars": 24,
         "prog": [("G", "maj"), ("D", "maj"), ("E", "min7"), ("C", "add9")],
         "pad": 0.05, "arp": 0.15, "arp_div": 4, "bass": 0.09, "drums": "shaker", "tone": "guitar",
+    },
+    "bold": {
+        "bpm": 124, "bars": 34,
+        "prog": [("A", "min"), ("F", "maj"), ("C", "maj"), ("G", "maj")],
+        "pad": 0.06, "arp": 0.12, "arp_div": 4, "bass": 0.20, "drums": "pop", "tone": "pluck",
+    },
+    "nature": {
+        "bpm": 72, "bars": 20,
+        "prog": [("D", "add9"), ("A", "maj"), ("B", "min7"), ("G", "maj7")],
+        "pad": 0.06, "arp": 0.15, "arp_div": 4, "bass": 0.08, "drums": None, "tone": "guitar",
+    },
+    "corporate": {
+        "bpm": 96, "bars": 26,
+        "prog": [("C", "maj"), ("A", "min7"), ("F", "maj7"), ("G", "6")],
+        "pad": 0.08, "arp": 0.13, "arp_div": 4, "bass": 0.12, "drums": "shaker", "tone": "piano",
+    },
+    "night": {
+        "bpm": 76, "bars": 20,
+        "prog": [("A", "min7"), ("F", "maj7"), ("D", "min7"), ("E", "min7")],
+        "pad": 0.11, "arp": 0.13, "arp_div": 2, "bass": 0.12, "drums": None, "tone": "piano",
     },
 }
 

@@ -94,8 +94,8 @@ def render_collage(cfg, size, out_path, tmpdir):
     th = cfg["_theme"]
     imgs = pick_images(cfg)
     main, thumbs = imgs[0], imgs[1:]
-    light = th["outro_text"] == "0x222222"  # มินิมอล = แถบข้อมูลสีขาว
-    panel = "0xF7F5F2" if light else "0x141414"
+    light = th.get("light", False)  # มินิมอล/ธรรมชาติ = แถบข้อมูลสีอ่อน
+    panel = th.get("panel") or ("0xF7F5F2" if light else "0x141414")
     gap = 8
     m = int(W * 0.045)
     main_h = mv.even(H * COLLAGE[size][0])
@@ -164,10 +164,12 @@ def render_collage(cfg, size, out_path, tmpdir):
                color=th["caption_color"], box=th["caption_box"] or box or "black@0.5")
 
     # แถบข้อมูลด้านล่าง: ราคา / รายละเอียด / เบอร์ / รหัสทรัพย์ (จัดกึ่งกลางแนวตั้งในแถบ)
-    text_c = "0x222222" if light else "white"
-    sub_c = "0x666666" if light else "white@0.75"
-    price_c = th["outro_price"] if light else th["price_color"]
-    pbox = th["price_box"] if th["price_box"] and not light else None
+    text_c = th["outro_text"] if light else "white"
+    sub_c = (th.get("sub") or "0x666666") if light else "white@0.75"
+    if light:  # แถบสีอ่อน: ใช้สี/กล่องราคาของฉากปิด (เช่น ธรรมชาติ = ตัวขาวบนกล่องเขียว)
+        price_c, pbox = th["outro_price"], th.get("outro_price_box")
+    else:
+        price_c, pbox = th["price_color"], th["price_box"]
     rows = []
     if t["price"]:
         fs = mv.fit_fontsize(t["price"], int(78 * s), max_w)
@@ -228,7 +230,7 @@ def render_poster(cfg, size, out_path, tmpdir):
         top_h = mv.even(H * 0.22)
         grads.append((f"gradients=s={W}x{top_h}:c0=0x00000080:c1=0x00000000:"
                       f"x0=0:y0=0:x1=0:y1={top_h}:n=2:speed=0", "0:0"))
-    if not th["outro_text"] == "0x222222":  # มินิมอลใช้กล่องขาว ไม่ต้องมีเงา
+    if not th.get("light"):  # สไตล์สีอ่อนใช้กล่องสีอ่อน ไม่ต้องมีเงาไล่สี
         for src, pos in grads:
             args += ["-f", "lavfi", "-i", src]
             parts.append(f"[{video}][{idx}:v]overlay={pos}[g{idx}]")

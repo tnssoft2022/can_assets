@@ -22,7 +22,8 @@ import make_video as mv
 THUMB_W = {"vertical": 270, "horizontal": 400}
 
 FORMAT_NAMES = {"vertical": "แนวตั้ง", "horizontal": "แนวนอน"}
-STYLE_NAMES = {"luxury": "หรูหรา", "modern": "ทันสมัย", "minimal": "มินิมอล"}
+STYLE_NAMES = {"luxury": "หรูหรา", "modern": "ทันสมัย", "minimal": "มินิมอล",
+               "bold": "ป้ายเซล", "nature": "ธรรมชาติ", "corporate": "ทางการ", "night": "หรูกลางคืน"}
 MOTION_NAMES = {
     "zoom_in": "ซูมเข้าช้า ๆ",
     "zoom_out": "ซูมออกช้า ๆ",
@@ -35,6 +36,8 @@ TRANSITION_NAMES = {
     "slideright": "สไลด์ไปขวา",
     "wipeleft": "ปาดไปซ้าย",
     "dissolve": "ละลาย",
+    "zoomin": "ซูมเข้า",
+    "fadeblack": "เฟดผ่านสีดำ",
 }
 
 

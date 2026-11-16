@@ -3,12 +3,16 @@
 สร้างวิดีโออสังหาฯ จากรูปภาพ (แนวตั้ง 9:16 และแนวนอน 16:9)
 
 วิธีใช้:
-    python3 make_video.py projects/<ชื่อโปรเจกต์> [--style luxury|modern|minimal] [vertical] [horizontal]
+    python3 make_video.py projects/<ชื่อโปรเจกต์> [--style <สไตล์>] [vertical] [horizontal]
 
 สไตล์:
-    luxury   หรูหรา   — ดำ-ทอง ไม่มีกล่องข้อความ เงาไล่สี เคลื่อนไหวช้า
-    modern   ทันสมัย  — แถบสีสด ตัวหนา เปลี่ยนภาพแบบสไลด์ จังหวะเร็ว
-    minimal  มินิมอล  — กล่องขาว ตัวอักษรเข้ม สะอาดตา
+    luxury    หรูหรา     — ดำ-ทอง ไม่มีกล่องข้อความ เงาไล่สี เคลื่อนไหวช้า
+    modern    ทันสมัย    — แถบสีสด ตัวหนา เปลี่ยนภาพแบบสไลด์ จังหวะเร็ว
+    minimal   มินิมอล    — กล่องขาว ตัวอักษรเข้ม สะอาดตา
+    bold      ป้ายเซล    — เหลือง-ดำ ตัวใหญ่ ราคาเด่น จังหวะเร็วมาก
+    nature    ธรรมชาติ   — เขียว-ครีม นุ่ม เฟดช้า
+    corporate ทางการ     — น้ำเงินกรมท่า-ขาว เรียบ
+    night     หรูกลางคืน — โทนมืด ตัวอักษรขาว สีฟ้าเรืองแสง
 
 โครงสร้างโฟลเดอร์โปรเจกต์:
     projects/<ชื่อ>/
@@ -117,6 +121,62 @@ THEMES = {
         "outro_eq": "brightness=0.28:saturation=0.25:contrast=0.7",
         "outro_text": "0x222222", "outro_price": "0x111111",
         "size_scale": 0.95,
+        "light": True, "shadow": False, "panel": "0xF7F5F2",
+    },
+    # ป้ายเซล: เหลือง-ดำ ตัวใหญ่ ราคาเด่น จังหวะเร็ว — ทรัพย์ราคาถูก / โปรโมชัน
+    "bold": {
+        "accent_color": "0xFFD400",
+        "text": "white", "sub": "white",
+        "box": "black@0.85", "price_box": "accent@1.0", "caption_box": "accent@1.0",
+        "caption_color": "0x111111", "price_color": "0x111111",
+        "bold": True, "gradient": False, "separator": False,
+        "transition": "zoomin", "transition_seconds": 0.35, "seconds_per_image": 2.5,
+        "zoom": 0.25,
+        "outro_eq": "brightness=-0.42:saturation=0.6",
+        "outro_text": "white", "outro_price": "0x111111", "outro_price_box": "accent@1.0",
+        "size_scale": 1.12, "panel": "0x111111",
+    },
+    # ธรรมชาติ: เขียว-ครีม นุ่ม เฟดช้า — บ้านเดี่ยว บ้านสวน ที่ดิน
+    "nature": {
+        "accent_color": "0x5B7B4A",
+        "text": "0x2F3A2A", "sub": "0x5E6B55",
+        "box": "0xF3EFE3@0.9", "price_box": "accent@0.95", "caption_box": "0xF3EFE3@0.92",
+        "caption_color": "accent", "price_color": "white",
+        "bold": False, "gradient": False, "separator": True,
+        "transition": "fade", "transition_seconds": 1.0, "seconds_per_image": 4.0,
+        "zoom": 0.08,
+        "outro_eq": "brightness=0.22:saturation=0.45:contrast=0.75",
+        "outro_text": "0x2F3A2A", "outro_price": "white", "outro_price_box": "accent@0.95",
+        "size_scale": 1.0,
+        "light": True, "shadow": False, "panel": "0xF3EFE3",
+    },
+    # ทางการ: น้ำเงินกรมท่า-ขาว เรียบ — อาคารพาณิชย์ ออฟฟิศ โกดัง
+    "corporate": {
+        "accent_color": "0x1F3A68",
+        "text": "white", "sub": "white@0.9",
+        "box": "0x14213D@0.88", "price_box": "white@0.96", "caption_box": "accent@0.95",
+        "caption_color": "white", "price_color": "0x14213D",
+        "bold": True, "gradient": False, "separator": False,
+        "transition": "wipeleft", "transition_seconds": 0.6, "seconds_per_image": 3.2,
+        "zoom": 0.10,
+        "outro_eq": "brightness=-0.42:saturation=0.4",
+        "outro_text": "white", "outro_price": "0x14213D", "outro_price_box": "white@0.96",
+        "size_scale": 1.0, "panel": "0x14213D",
+    },
+    # หรูกลางคืน: โทนมืด ตัวอักษรขาว สีฟ้าเรืองแสง — คอนโดหรู เพนท์เฮาส์
+    "night": {
+        "accent_color": "0x7FDBFF",
+        "text": "white", "sub": "white@0.8",
+        "box": None, "price_box": None, "caption_box": None,
+        "caption_color": "accent", "price_color": "accent",
+        "bold": False, "gradient": True, "separator": True,
+        "transition": "fadeblack", "transition_seconds": 0.8, "seconds_per_image": 3.8,
+        "zoom": 0.12,
+        "outro_eq": "brightness=-0.58:saturation=0.3",
+        "outro_text": "white", "outro_price": "accent",
+        "size_scale": 1.0, "panel": "0x050505",
+        "glow": True,
+        "gradient_strength": {"top_alpha": "E8", "top_h": 0.42, "bottom_alpha": "F0", "bottom_h": 0.52},
     },
 }
 DEFAULT_STYLE = "luxury"
@@ -206,7 +266,10 @@ class TextLayer:
             f"alpha='{fade_alpha(start, end)}'",
             f"enable='between(t,{start:.2f},{end:.2f})'",
         ]
-        if not box or not box.startswith("white"):
+        if self.theme.get("glow") and color.startswith(self.theme["accent_color"]):
+            # เรืองแสง: ขอบสีเดียวกับตัวอักษรแบบโปร่ง
+            opts.append(f"borderw={max(2, size // 22)}:bordercolor={self.theme['accent_color']}@0.35")
+        elif self.theme.get("shadow", True) and (not box or not box.startswith("white")):
             opts.append("shadowcolor=black@0.55:shadowx=2:shadowy=2")
         if bold and not FONT_BOLD:  # ไม่มีไฟล์ตัวหนา → ใช้เส้นขอบสีเดียวกันทำให้หนาขึ้นแทน
             opts.append(f"borderw={max(1, size // 28)}:bordercolor={color}")
@@ -466,12 +529,15 @@ def render(cfg, fmt, out_path, tmpdir):
 
     # เงาไล่สีด้านบน/ล่าง ให้ข้อความอ่านง่ายโดยไม่ต้องมีกล่อง
     if th["gradient"]:
-        bottom = int(H * (0.45 if vertical else 0.55))
-        top = int(H * (0.30 if vertical else 0.30))
+        # ความเข้ม/ความสูงของเงาไล่สีปรับได้ต่อสไตล์ (night เข้มกว่า luxury)
+        g = th.get("gradient_strength", {})
+        bottom = even(H * g.get("bottom_h", 0.45 if vertical else 0.55))
+        top = even(H * g.get("top_h", 0.30))
+        ba, ta = g.get("bottom_alpha", "D0"), g.get("top_alpha", "A0")
         args += ["-f", "lavfi", "-i",
-                 f"gradients=s={W}x{bottom}:c0=0x000000D0:c1=0x00000000:x0=0:y0={bottom}:x1=0:y1=0:n=2:speed=0:d={total:.2f}:r={FPS}",
+                 f"gradients=s={W}x{bottom}:c0=0x000000{ba}:c1=0x00000000:x0=0:y0={bottom}:x1=0:y1=0:n=2:speed=0:d={total:.2f}:r={FPS}",
                  "-f", "lavfi", "-i",
-                 f"gradients=s={W}x{top}:c0=0x000000A0:c1=0x00000000:x0=0:y0=0:x1=0:y1={top}:n=2:speed=0:d={total:.2f}:r={FPS}"]
+                 f"gradients=s={W}x{top}:c0=0x000000{ta}:c1=0x00000000:x0=0:y0=0:x1=0:y1={top}:n=2:speed=0:d={total:.2f}:r={FPS}"]
         parts.append(f"[{video}][{input_idx}:v]overlay=0:H-h:enable='lt(t,{outro_start + 0.5:.2f})'[vg1]")
         parts.append(f"[vg1][{input_idx + 1}:v]overlay=0:0:enable='lt(t,{outro_start + 0.5:.2f})'[vg2]")
         video = "vg2"
