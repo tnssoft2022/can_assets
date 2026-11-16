@@ -72,6 +72,13 @@ def t(sec):
     return f"{sec:.1f}"
 
 
+def narr_cell(text, dur):
+    """ช่องเสียงพากย์: บท + ความยาวเสียง"""
+    if not text:
+        return "—"
+    return f"🔊 {cell(text)}" + (f"<br>({dur:.1f} วิ)" if dur else "")
+
+
 def cell(text):
     """ข้อความในตาราง Markdown: กัน | และขึ้นบรรทัดใหม่"""
     return text.replace("|", "\\|").replace("\n", "<br>")
@@ -88,6 +95,15 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
     contact = cfg.get("contact", {}) or {}
     style = cfg["_style"]
     tr = TRANSITION_NAMES.get(tm["transition"], tm["transition"])
+    has_vo = any(img.get("voice") for img in images) or bool(cfg.get("_outro_voice"))
+    has_script = any(img.get("narration") for img in images) or bool(cfg.get("outro_narration"))
+    if has_vo:
+        v = cfg.get("voice") or {}
+        vo_line = f"มี — เสียง {v.get('name', 'Kanya')} (macOS) ความเร็ว {v.get('rate', 200)}"
+    elif has_script:
+        vo_line = "มีบท แต่ยังสร้างเสียงไม่ได้ (ไม่มีคำสั่ง say / ปิดด้วย voiceover: false)"
+    else:
+        vo_line = "ไม่มี — ใส่บทได้ที่ `images[].narration` และ `outro_narration`"
 
     lines = [
         f"# สตอรี่บอร์ด — {title}",
@@ -97,8 +113,10 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         f"| ขนาด | {FORMAT_NAMES[fmt]} {tm['W']}×{tm['H']} |",
         f"| สไตล์ | {STYLE_NAMES.get(style, style)} (`{style}`) |",
         f"| ความยาวรวม | **{t(tm['total'])} วินาที** ({tm['n']} ฉากรูป + ฉากปิด {t(tm['D_OUT'])} วินาที) |",
-        f"| ต่อฉาก | {tm['D']:g} วินาที, เปลี่ยนภาพแบบ{tr} {tm['T']:g} วินาที |",
-        f"| เพลง | {os.path.basename(cfg['_music']) if cfg['_music'] else 'ไม่มี (แทร็กเงียบ)'} |",
+        f"| ต่อฉาก | อย่างน้อย {tm['D']:g} วินาที (ยาวขึ้นตามเสียงพากย์), เปลี่ยนภาพแบบ{tr} {tm['T']:g} วินาที |",
+        f"| เพลง | {os.path.basename(cfg['_music']) if cfg['_music'] else 'ไม่มี (แทร็กเงียบ)'}"
+        f"{' (เบาลงอัตโนมัติตอนมีเสียงพากย์)' if cfg['_music'] and has_vo else ''} |",
+        f"| เสียงพากย์ | {vo_line} |",
         f"| โลโก้ | {'มุมขวาบนตลอดวิดีโอ + โลโก้ใหญ่ในฉากปิด' if cfg['_logo'] else 'ไม่มี'} |",
         "",
         "## ข้อความที่แสดงตลอดวิดีโอ",
@@ -119,14 +137,13 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         "",
         "## ฉาก",
         "",
-        "| ฉาก | ภาพ | เวลา (วินาที) | รูป / กล้อง | ข้อความบนจอ |",
-        "|---|---|---|---|---|",
+        "| ฉาก | ภาพ | เวลา (วินาที) | รูป / กล้อง | ข้อความบนจอ | เสียงพากย์ |",
+        "|---|---|---|---|---|---|",
     ]
-    step, D = tm["step"], tm["D"]
     for i, img in enumerate(images):
         thumb = f"scene{i + 1:02d}.jpg"
         make_thumb(img, i, tm, os.path.join(thumb_dir, thumb))
-        start, end = i * step, min(i * step + D, tm["outro_start"] + tm["T"])
+        start, end = tm["starts"][i], tm["starts"][i] + tm["durs"][i]
         texts = []
         if i == 0 and title:
             texts.append(f"**{title}**")
@@ -139,7 +156,8 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         nxt = f"<br>→ {tr}" if i < len(images) - 1 else "<br>→ เฟดเข้าฉากปิด"
         lines.append(
             f"| {i + 1} | ![ฉาก {i + 1}]({thumb_rel}/{thumb}) | {t(start)} – {t(end)} | "
-            f"`{cell(src)}`<br>{cam}{nxt} | {cell('<br>'.join(texts)) if texts else '—'} |")
+            f"`{cell(src)}`<br>{cam}{nxt} | {cell('<br>'.join(texts)) if texts else '—'} | "
+            f"{narr_cell(img.get('narration'), img.get('voice_dur'))} |")
 
     # ฉากปิด
     outro_texts = [t_ for t_ in [
@@ -153,7 +171,8 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
     make_thumb(images[-1], len(images) - 1, tm, os.path.join(thumb_dir, "outro.jpg"), outro=True)
     lines.append(
         f"| ปิด | ![ฉากปิด]({thumb_rel}/outro.jpg) | {t(tm['outro_start'])} – {t(tm['total'])} | "
-        f"รูปสุดท้ายแบบเบลอ + มืดลง<br>เฟดดำตอนจบ | {cell('<br>'.join(outro_texts))} |")
+        f"รูปสุดท้ายแบบเบลอ + มืดลง<br>เฟดดำตอนจบ | {cell('<br>'.join(outro_texts))} | "
+        f"{narr_cell(cfg.get('outro_narration'), cfg.get('_outro_voice_dur'))} |")
 
     lines += [
         "",
@@ -165,6 +184,9 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         "|---|---|",
         "| เปลี่ยนลำดับ / ตัดรูป | `images` (เรียงตามลำดับฉาก) |",
         "| ข้อความป้ายของแต่ละฉาก | `images[].caption` |",
+        "| บทพากย์ของแต่ละฉาก / ฉากปิด | `images[].narration`, `outro_narration` (ฉากยาวขึ้นเองตามเสียง) |",
+        "| ความเร็ว / ปิดเสียงพากย์ | `voice.rate` / `\"voiceover\": false` |",
+        "| เพลง | `music` (ไฟล์ หรือ `false`) — ไม่ระบุ = เพลงประจำสไตล์ใน `brand/music/` |",
         "| ชื่อ / ทำเล / ราคา / รายละเอียด | `title`, `location`, `price`, `details` |",
         "| ความยาวต่อฉาก / การเปลี่ยนภาพ | `seconds_per_image`, `transition`, `transition_seconds` |",
         "| ความยาวฉากปิด / ข้อมูลติดต่อ | `outro_seconds`, `contact` |",

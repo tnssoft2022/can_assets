@@ -307,6 +307,25 @@ def load_project(project_dir, style_override=None, upscale_images=True):
 
     cfg["_images"] = images
     cfg["_music"] = optional("music")
+    # ไม่ได้กำหนดเพลง → ใช้เพลงประจำสไตล์จาก brand/music/<สไตล์>.mp3 (ตั้ง "music": false เพื่อปิด)
+    if not cfg["_music"] and cfg.get("music") is None:
+        p = os.path.join(BRAND_DIR, "music", f"{style}.mp3")
+        cfg["_music"] = p if os.path.exists(p) else None
+
+    # เสียงพากย์จากบท "narration" ของแต่ละรูป + "outro_narration" (ปิดได้ด้วย "voiceover": false)
+    has_script = any(it.get("narration") for it in items) or cfg.get("outro_narration")
+    if has_script and cfg.get("voiceover", True):
+        import voice
+        if voice.available():
+            vdir = os.path.join(project_dir, "cache", "voice")
+            for it, img in zip(items, images):
+                img["narration"] = it.get("narration", "")
+                if img["narration"]:
+                    img["voice"], img["voice_dur"] = voice.synth(img["narration"], vdir, cfg.get("voice"))
+            if cfg.get("outro_narration"):
+                cfg["_outro_voice"], cfg["_outro_voice_dur"] = voice.synth(cfg["outro_narration"], vdir, cfg.get("voice"))
+        else:
+            print("  ! ข้ามเสียงพากย์: ไม่พบคำสั่ง say (ใช้ได้เฉพาะ macOS)")
     cfg["_logo"] = optional("logo")
     # ไม่มีโลโก้ในโปรเจกต์ → ใช้โลโก้บริษัทจาก brand/ (ตั้ง "logo": false เพื่อไม่ใส่โลโก้)
     if not cfg["_logo"] and cfg.get("logo") is None and brand.get("logo"):
@@ -367,21 +386,34 @@ def build_clip(src, img, W, H, frames, motion, zoom, out_label, fill=True, idx=0
     )
 
 
+VO_LEAD = 0.3        # เสียงพากย์เริ่มหลังฉากเริ่มกี่วินาที
+VO_TAIL = 0.35       # เว้นท้ายหลังพูดจบ ก่อนเริ่มเปลี่ยนภาพ
+OUTRO_VO_LEAD = 0.5  # เสียงพากย์ฉากปิดเริ่มหลังฉากปิดเริ่ม
+
+
 def timeline(cfg, fmt):
     """เวลาของแต่ละช่วงในวิดีโอ — ใช้ร่วมกันระหว่าง render() และสตอรี่บอร์ด"""
     W, H = FORMATS[fmt]
     vertical = H > W
     th = cfg["_theme"]
-    n = len(cfg["_images"])
+    images = cfg["_images"]
+    n = len(images)
     D = float(th["seconds_per_image"])
     T = float(th["transition_seconds"])
     D_OUT = float(cfg.get("outro_seconds", 4.5))
-    step = D - T
-    outro_start = n * step
-    intro_end = step if n > 1 else outro_start
+    # ความยาวแต่ละฉาก: อย่างน้อยเท่าค่าของสไตล์ และยาวพอให้เสียงพากย์ของฉากนั้นพูดจบก่อนเปลี่ยนภาพ
+    durs = [max(D, img.get("voice_dur", 0) + VO_LEAD + VO_TAIL + T) if img.get("voice") else D for img in images]
+    starts = [0.0]
+    for d in durs:
+        starts.append(starts[-1] + d - T)
+    outro_start = starts[n]
+    if cfg.get("_outro_voice"):
+        D_OUT = max(D_OUT, cfg["_outro_voice_dur"] + OUTRO_VO_LEAD + 1.2)
+    intro_end = starts[1] if n > 1 else outro_start
     return {
         "W": W, "H": H, "vertical": vertical, "n": n,
-        "D": D, "T": T, "D_OUT": D_OUT, "step": step,
+        "D": D, "T": T, "D_OUT": D_OUT, "step": D - T,
+        "durs": durs, "starts": starts,
         "outro_start": outro_start, "total": outro_start + D_OUT,
         "intro_end": intro_end,
         "detail_start": intro_end + 0.1 if n > 1 else 0.8,
@@ -398,9 +430,9 @@ def render(cfg, fmt, out_path, tmpdir):
     images = cfg["_images"]
     n = tm["n"]
     D, T, D_OUT = tm["D"], tm["T"], tm["D_OUT"]
-    frames = int(round(D * FPS))
+    durs, starts = tm["durs"], tm["starts"]
     frames_out = int(round(D_OUT * FPS))
-    step, outro_start, total = tm["step"], tm["outro_start"], tm["total"]
+    outro_start, total = tm["outro_start"], tm["total"]
 
     args = ["ffmpeg", "-hide_banner", "-y", "-loglevel", "error", "-stats"]
     for img in images:
@@ -412,8 +444,8 @@ def render(cfg, fmt, out_path, tmpdir):
 
     for i, img in enumerate(images):
         src = "last_a" if i == last else f"{i}:v"
-        parts.append(build_clip(src, img, W, H, frames, MOTIONS[i % len(MOTIONS)], th["zoom"], f"c{i}",
-                                fill=fill, idx=i))
+        parts.append(build_clip(src, img, W, H, int(round(durs[i] * FPS)), MOTIONS[i % len(MOTIONS)],
+                                th["zoom"], f"c{i}", fill=fill, idx=i))
 
     # ฉากปิด: รูปสุดท้ายเบลอ + ข้อมูลติดต่อ
     parts.append(
@@ -426,7 +458,7 @@ def render(cfg, fmt, out_path, tmpdir):
     prev = "c0"
     for k in range(1, n + 1):
         tr = th["transition"] if k < n else "fade"
-        parts.append(f"[{prev}][c{k}]xfade=transition={tr}:duration={T}:offset={k * step:.3f}[x{k}]")
+        parts.append(f"[{prev}][c{k}]xfade=transition={tr}:duration={T}:offset={starts[k]:.3f}[x{k}]")
         prev = f"x{k}"
     video = prev
     input_idx = n
@@ -502,8 +534,8 @@ def render(cfg, fmt, out_path, tmpdir):
         tl.add(details, fit_fontsize(details, int(44 * s), max_w), cx, H - 300, detail_start, outro_start,
                color=th["sub"], box=box, bold=False)
         for i, img in enumerate(images):
-            st = i * step + (0.3 if i else 0.5)
-            tl.add(img["caption"], int(42 * s), cx, H - 560 if i else 518, st, i * step + step,
+            st = starts[i] + (0.3 if i else 0.5)
+            tl.add(img["caption"], int(42 * s), cx, H - 560 if i else 518, st, starts[i + 1],
                    color=ccol, box=cbox)
     else:
         x0 = int(80 * s)
@@ -516,8 +548,8 @@ def render(cfg, fmt, out_path, tmpdir):
         if th["separator"] and not pbox:
             tl.line(x0, H - 185, 90, 3, 0.8, outro_start)
         for i, img in enumerate(images):
-            st = i * step + 0.3
-            tl.add(img["caption"], int(40 * s), x0, int(70 * s), st, i * step + step, color=ccol, box=cbox)
+            st = starts[i] + 0.3
+            tl.add(img["caption"], int(40 * s), x0, int(70 * s), st, starts[i + 1], color=ccol, box=cbox)
 
     # ฉากปิด (เลื่อนข้อความลงถ้ามีโลโก้ใหญ่)
     a, b = outro_start + 0.3, total
@@ -548,11 +580,39 @@ def render(cfg, fmt, out_path, tmpdir):
     parts.append(f"[{video}]fade=t=in:st=0:d=0.5,fade=t=out:st={total - 0.8:.2f}:d=0.8[vout]")
 
     # เสียง
+    # เสียงพากย์: วางแต่ละท่อนตามเวลาเริ่มของฉาก แล้วรวมเป็นแทร็กเดียว
+    vo = [(img["voice"], starts[i] + VO_LEAD) for i, img in enumerate(images) if img.get("voice")]
+    if cfg.get("_outro_voice"):
+        vo.append((cfg["_outro_voice"], outro_start + OUTRO_VO_LEAD))
+    voice_label = None
+    if vo:
+        labels = []
+        for k, (path, at) in enumerate(vo):
+            args += ["-i", path]
+            ms = int(at * 1000)
+            parts.append(f"[{input_idx}:a]aformat=sample_rates=44100:channel_layouts=stereo,"
+                         f"adelay={ms}|{ms},apad=whole_dur={total:.2f}[vo{k}]")
+            labels.append(f"[vo{k}]")
+            input_idx += 1
+        parts.append("".join(labels) + f"amix=inputs={len(labels)}:normalize=0:duration=longest,"
+                     f"atrim=0:{total:.2f}[voice]")
+        voice_label = "voice"
+
     if cfg["_music"]:
         args += ["-stream_loop", "-1", "-i", cfg["_music"]]
-        vol = float(cfg.get("music_volume", 0.8))
-        parts.append(f"[{input_idx}:a]atrim=0:{total:.2f},asetpts=N/SR/TB,volume={vol},"
-                     f"afade=t=in:st=0:d=1,afade=t=out:st={total - 2:.2f}:d=2[aout]")
+        vol = float(cfg.get("music_volume", 0.8 if not voice_label else 0.55))
+        parts.append(f"[{input_idx}:a]atrim=0:{total:.2f},asetpts=N/SR/TB,"
+                     f"aformat=sample_rates=44100:channel_layouts=stereo,volume={vol},"
+                     f"afade=t=in:st=0:d=1,afade=t=out:st={total - 2:.2f}:d=2[music]")
+        if voice_label:
+            # ลดเสียงเพลงลงอัตโนมัติตอนมีเสียงพูด (ducking)
+            parts.append("[voice]asplit=2[vkey][vmix]")
+            parts.append("[music][vkey]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450[duck]")
+            parts.append("[duck][vmix]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[aout]")
+        else:
+            parts.append("[music]anull[aout]")
+    elif voice_label:
+        parts.append("[voice]alimiter=limit=0.95[aout]")
     else:
         args += ["-f", "lavfi", "-t", f"{total:.2f}", "-i", "anullsrc=r=44100:cl=stereo"]
         parts.append(f"[{input_idx}:a]anull[aout]")

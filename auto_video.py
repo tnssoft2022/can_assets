@@ -290,6 +290,15 @@ def build_config(info, style, max_images, music, formats):
             images[i]["caption"] = images[i - 1]["caption"]
         images[0]["caption"] = ""
 
+    # บทพากย์พื้นฐาน: ฉากแรก = ชื่อ + ราคา, ฉากอื่น = คำบรรยายของรูป, ฉากปิด = ช่องทางติดต่อ
+    # (แก้ใน config.json ได้ — สตอรี่บอร์ดแสดงบทพากย์ทุกฉาก)
+    if images:
+        images[0]["narration"] = f"{short_title(info['project'])} {price_text(info)}"
+    for im in images[1:]:
+        im["narration"] = im["caption"]
+    first_phone = info["phones"][0] if info["phones"] else ""
+    outro_narration = "สนใจติดต่อ อัพทาวน์ แอสเซ็ทส์" + (f" โทร {first_phone}" if first_phone else "")
+
     ref = info.get("ref") or info["id"]
     cfg = {
         "title": short_title(info["project"]),
@@ -305,7 +314,8 @@ def build_config(info, style, max_images, music, formats):
         "image_dir": info["folder"],
         "images": images,
         "outro_seconds": 4.5,
-        "music": music or False,
+        **({"music": music} if music else {}),  # ไม่ระบุ = เพลงประจำสไตล์ใน brand/music/
+        "outro_narration": outro_narration,
         "formats": formats,
         "_source": info.get("url", ""),
     }
