@@ -20,7 +20,9 @@
     --limit N         ทำแค่ N ทรัพย์แรก (ใช้ทดสอบ)
     --force           สร้างใหม่แม้มีวิดีโออยู่แล้ว (ปกติจะข้าม)
     --config-only     สร้างแค่ config.json ไม่ render (เอาไปแก้ข้อความก่อนได้)
-    --make W          video (วิดีโอ, ค่าเริ่มต้น) / poster (รูปโปสต์) / both (ทั้งคู่)
+    --make W          สิ่งที่จะสร้าง คั่นด้วย , ได้หลายอย่าง:
+                      video (วิดีโอ, ค่าเริ่มต้น) / poster (รูปโปสต์) / storyboard (สตอรี่บอร์ด)
+                      both = video,poster   เช่น --make storyboard,video
     --poster-size S   post 1080x1350 (ค่าเริ่มต้น) / square 1080x1080 / story 1080x1920
 
 ผลลัพธ์อยู่ที่ projects/<รหัส>_<ชื่อโครงการ>/  (config.json + output/*.mp4)
@@ -33,6 +35,7 @@ import sys
 import time
 
 import make_poster
+import make_storyboard
 import make_video
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -374,8 +377,13 @@ def main():
         sys.exit("ไม่พบโฟลเดอร์ทรัพย์ — ตั้งค่า \"source_dir\" ใน settings.json (ดู settings.example.json) "
                  "หรือระบุด้วย --source <โฟลเดอร์>"
                  + (f"\n  (ค่าปัจจุบัน: {opts['source']})" if opts["source"] else ""))
-    if opts["make"] not in ("video", "poster", "both"):
-        sys.exit("--make ต้องเป็น video / poster / both")
+    kinds = set()
+    for k in opts["make"].split(","):
+        k = k.strip()
+        kinds |= {"video", "poster"} if k == "both" else {k}
+    if not kinds or not kinds <= {"video", "poster", "storyboard"}:
+        sys.exit("--make ต้องเป็น video / poster / storyboard / both (คั่นด้วย , ได้)")
+    opts["kinds"] = kinds
     if opts["poster_size"] not in make_poster.SIZES:
         sys.exit(f"--poster-size ต้องเป็น: {', '.join(make_poster.SIZES)}")
     if opts["style"] not in make_video.THEMES:
@@ -432,9 +440,13 @@ def main():
         print(f"\n=== {label}")
         try:
             made = []
-            if opts["make"] in ("video", "both"):
+            if "storyboard" in opts["kinds"]:
+                for fmt in opts["formats"]:
+                    p = make_storyboard.make(proj, opts["style"], fmt, skip_existing=not opts["force"])
+                    made += [p] if p else []
+            if "video" in opts["kinds"]:
                 made += make_video.make(proj, opts["style"], opts["formats"], skip_existing=not opts["force"])
-            if opts["make"] in ("poster", "both"):
+            if "poster" in opts["kinds"]:
                 p = make_poster.make(proj, opts["style"], opts["poster_size"], skip_existing=not opts["force"])
                 made += [p] if p else []
             if made:

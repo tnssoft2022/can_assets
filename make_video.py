@@ -233,7 +233,7 @@ def load_brand():
         return json.load(f)
 
 
-def load_project(project_dir, style_override=None):
+def load_project(project_dir, style_override=None, upscale_images=True):
     cfg_path = os.path.join(project_dir, "config.json")
     if not os.path.exists(cfg_path):
         sys.exit(f"ไม่พบ {cfg_path}")
@@ -292,7 +292,7 @@ def load_project(project_dir, style_override=None):
         return p if os.path.exists(p) else None
 
     # ขยายรูปเล็กด้วย AI ให้คมขึ้น (ปิดได้ด้วย "ai_upscale": false)
-    if cfg.get("ai_upscale", True):
+    if upscale_images and cfg.get("ai_upscale", True):
         import upscale
         if upscale.available():
             for img in images:
@@ -312,6 +312,18 @@ def load_project(project_dir, style_override=None):
     return cfg
 
 
+def clip_mode(img, W, H, fill):
+    """วิธีจัดภาพของแต่ละฉาก: 'pan' แพนตามความกว้าง / 'cover' ตัดเต็มจอ+ซูม / 'fit' วางกลาง+พื้นเบลอ"""
+    iw, ih = img["size"]
+    img_ar, out_ar = iw / ih, W / H
+    mismatch = img_ar / out_ar > 1.35 or out_ar / img_ar > 1.35
+    if mismatch and fill and img_ar > out_ar:
+        return "pan"
+    if mismatch and not fill:
+        return "fit"
+    return "cover"
+
+
 def build_clip(src, img, W, H, frames, motion, zoom, out_label, fill=True, idx=0):
     """ฟิลเตอร์สำหรับรูปหนึ่งรูป → คลิปขนาด WxH ยาว frames เฟรม"""
     iw, ih = img["size"]
@@ -319,8 +331,8 @@ def build_clip(src, img, W, H, frames, motion, zoom, out_label, fill=True, idx=0
     zp = zoompan_expr(motion, frames, zoom)
     tail = f"fps={FPS},setsar=1,format=yuv420p"
 
-    mismatch = img_ar / out_ar > 1.35 or out_ar / img_ar > 1.35
-    if mismatch and fill and img_ar > out_ar:
+    mode = clip_mode(img, W, H, fill)
+    if mode == "pan":
         # เติมเต็มจอ: ขยายรูปให้สูงเต็มจอ แล้วเลื่อนกล้องแพนไปตามความกว้างของรูป (สลับซ้าย↔ขวา)
         sw = even(2 * H * img_ar)
         rng = sw - 2 * W
@@ -329,12 +341,8 @@ def build_clip(src, img, W, H, frames, motion, zoom, out_label, fill=True, idx=0
         return (f"[{src}]scale={sw}:{2 * H}:flags=lanczos,loop=loop={frames - 1}:size=1,setpts=N/{FPS}/TB,"
                 f"crop=w={2 * W}:h={2 * H}:x='{rng}*(0.15+0.7*{prog})':y=0,"
                 f"scale={W}:{H}:flags=lanczos,{tail}[{out_label}]")
-    if mismatch and fill:
-        # รูปสูงกว่าจอมาก → ตัดให้เต็มจอแล้วซูม (ไม่มีขอบเบลอ)
-        mismatch = False
-
-    # ถ้าสัดส่วนรูปต่างจากจอมาก (เช่น รูปแนวตั้งในวิดีโอแนวนอน) ให้วางรูปเต็มกลางจอ + พื้นหลังเบลอ
-    if not mismatch:
+    # 'cover': ตัดให้เต็มจอแล้วซูม / 'fit': วางรูปเต็มกลางจอ + พื้นหลังเบลอ (เช่น รูปแนวตั้งในวิดีโอแนวนอน)
+    if mode == "cover":
         return (f"[{src}]scale={W * 2}:{H * 2}:force_original_aspect_ratio=increase:flags=lanczos,"
                 f"crop={W * 2}:{H * 2},zoompan={zp}:d={frames}:s={W}x{H}:fps={FPS},"
                 f"{tail}[{out_label}]")
@@ -354,21 +362,40 @@ def build_clip(src, img, W, H, frames, motion, zoom, out_label, fill=True, idx=0
     )
 
 
-def render(cfg, fmt, out_path, tmpdir):
+def timeline(cfg, fmt):
+    """เวลาของแต่ละช่วงในวิดีโอ — ใช้ร่วมกันระหว่าง render() และสตอรี่บอร์ด"""
     W, H = FORMATS[fmt]
     vertical = H > W
     th = cfg["_theme"]
-    images = cfg["_images"]
-    n = len(images)
+    n = len(cfg["_images"])
     D = float(th["seconds_per_image"])
     T = float(th["transition_seconds"])
     D_OUT = float(cfg.get("outro_seconds", 4.5))
-    frames = int(round(D * FPS))
-    frames_out = int(round(D_OUT * FPS))
-
     step = D - T
     outro_start = n * step
-    total = outro_start + D_OUT
+    intro_end = step if n > 1 else outro_start
+    return {
+        "W": W, "H": H, "vertical": vertical, "n": n,
+        "D": D, "T": T, "D_OUT": D_OUT, "step": step,
+        "outro_start": outro_start, "total": outro_start + D_OUT,
+        "intro_end": intro_end,
+        "detail_start": intro_end + 0.1 if n > 1 else 0.8,
+        # แนวตั้ง: เติมภาพเต็มจอเสมอ (ปิดได้ด้วย "vertical_fill": false) / แนวนอน: รูปแนวตั้งวางกลาง + พื้นเบลอ
+        "fill": bool(cfg.get("vertical_fill", True)) if vertical else bool(cfg.get("horizontal_fill", False)),
+        "transition": th["transition"],
+    }
+
+
+def render(cfg, fmt, out_path, tmpdir):
+    tm = timeline(cfg, fmt)
+    W, H, vertical = tm["W"], tm["H"], tm["vertical"]
+    th = cfg["_theme"]
+    images = cfg["_images"]
+    n = tm["n"]
+    D, T, D_OUT = tm["D"], tm["T"], tm["D_OUT"]
+    frames = int(round(D * FPS))
+    frames_out = int(round(D_OUT * FPS))
+    step, outro_start, total = tm["step"], tm["outro_start"], tm["total"]
 
     args = ["ffmpeg", "-hide_banner", "-y", "-loglevel", "error", "-stats"]
     for img in images:
@@ -376,8 +403,7 @@ def render(cfg, fmt, out_path, tmpdir):
     parts = []
     last = n - 1
     parts.append(f"[{last}:v]split=2[last_a][last_b]")
-    # แนวตั้ง: เติมภาพเต็มจอเสมอ (ปิดได้ด้วย "vertical_fill": false) / แนวนอน: รูปแนวตั้งวางกลาง + พื้นเบลอ
-    fill = bool(cfg.get("vertical_fill", True)) if vertical else bool(cfg.get("horizontal_fill", False))
+    fill = tm["fill"]
 
     for i, img in enumerate(images):
         src = "last_a" if i == last else f"{i}:v"
@@ -456,8 +482,7 @@ def render(cfg, fmt, out_path, tmpdir):
     contact = cfg.get("contact", {}) or {}
     s = min(W, H) / 1080 * th["size_scale"]
     max_w = W * 0.86
-    intro_end = step if n > 1 else outro_start
-    detail_start = intro_end + 0.1 if n > 1 else 0.8
+    intro_end, detail_start = tm["intro_end"], tm["detail_start"]
     box, pbox, cbox = th["box"], th["price_box"], th["caption_box"]
     pcol, ccol = th["price_color"], th["caption_color"]
 

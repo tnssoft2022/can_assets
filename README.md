@@ -3,6 +3,7 @@
 สร้างวิดีโอและรูปโปสต์โฆษณาทรัพย์จากรูปภาพ พร้อมโลโก้ ราคา รายละเอียด และช่องทางติดต่อ
 - วิดีโอ: แนวตั้ง (TikTok / Reels / Shorts) และแนวนอน (YouTube / Facebook)
 - รูปโปสต์: ฟีด Facebook / IG (4:5), จัตุรัส (1:1), Story (9:16)
+- สตอรี่บอร์ด (Markdown + รูปย่อ) ไว้ตรวจลำดับฉาก ข้อความ และเวลา ก่อน render
 - รูปเล็ก/ไม่ชัด ขยายด้วย AI ให้คมขึ้นอัตโนมัติ
 
 ## เริ่มต้นใช้งานเร็ว
@@ -16,6 +17,9 @@ python3 auto_video.py 205 --make poster --style modern
 
 # ทั้งวิดีโอและรูปโปสต์
 python3 auto_video.py 205 --make both --style modern --formats vertical
+
+# สตอรี่บอร์ดก่อน (ตรวจแล้วค่อยสร้างวิดีโอ)
+python3 auto_video.py 205 --make storyboard --style modern --formats vertical
 ```
 
 ผลลัพธ์อยู่ที่ `projects/<รหัส>_<ชื่อโครงการ>/output/`
@@ -27,6 +31,7 @@ python3 auto_video.py 205 --make both --style modern --formats vertical
 | `auto_video.py` | อ่าน `รายละเอียด.txt` ของทรัพย์ แล้วสร้างวิดีโอ / รูปโปสต์อัตโนมัติ |
 | `make_video.py` | ตัวสร้างวิดีโอจาก `config.json` |
 | `make_poster.py` | ตัวสร้างรูปโปสต์จาก `config.json` เดียวกัน |
+| `make_storyboard.py` | ตัวสร้างสตอรี่บอร์ด (Markdown + รูปย่อแต่ละฉาก) จาก `config.json` เดียวกัน |
 | `upscale.py` | ขยายรูปเล็กด้วย AI (Real-ESRGAN) ให้คมขึ้น |
 | `tools/realesrgan/` | โปรแกรม Real-ESRGAN + โมเดลรูปถ่าย (ไม่เก็บใน git) |
 | `cache/upscaled/` | รูปที่ขยายแล้ว เก็บไว้ใช้ซ้ำ (ไม่เก็บใน git ลบได้) |
@@ -174,7 +179,7 @@ python3 auto_video.py 205 --style modern --formats vertical
 | `--all` | ทำทุกทรัพย์ในโฟลเดอร์ | — |
 | `--force` | สร้างใหม่แม้มีไฟล์อยู่แล้ว (และสร้าง `config.json` ใหม่ทับของเดิม) | ข้ามที่มีแล้ว |
 | `--config-only` | สร้างแค่ `config.json` ไม่ทำวิดีโอ/โปสต์ | — |
-| `--make` | `video` วิดีโอ / `poster` รูปโปสต์ / `both` ทั้งคู่ | `video` |
+| `--make` | `video` วิดีโอ / `poster` รูปโปสต์ / `storyboard` สตอรี่บอร์ด / `both` = video+poster — คั่นด้วย `,` ได้ เช่น `storyboard,video` | `video` |
 | `--poster-size` | `post` 1080×1350 / `square` 1080×1080 / `story` 1080×1920 | `post` |
 
 > ถ้าแก้ข้อความใน `config.json` เอง ให้สร้างใหม่ด้วย `make_video.py` / `make_poster.py` (วิธีที่ 2)
@@ -188,6 +193,7 @@ python3 auto_video.py 205 --style modern --formats vertical
 ```bash
 python3 make_video.py projects/<ชื่อ> --style modern vertical
 python3 make_poster.py projects/<ชื่อ> --style modern --size post
+python3 make_storyboard.py projects/<ชื่อ> --style modern vertical
 ```
 
 ---
@@ -287,6 +293,35 @@ python3 make_poster.py projects/<ชื่อ> --style modern --size post
 ขนาด story เว้นขอบล่างไว้ให้พ้นปุ่มตอบกลับของ IG / Facebook
 
 ไฟล์อยู่ที่ `projects/<รหัส>_<ชื่อ>/output/<ชื่อ>_<สไตล์>_poster_<ขนาด>.jpg`
+
+---
+
+## สตอรี่บอร์ด (`make_storyboard.py`)
+
+ไฟล์ Markdown สำหรับตรวจวิดีโอก่อน render จริง (สร้างเร็ว ไม่ต้องขยายรูปด้วย AI)
+เวลาและการจัดภาพคำนวณด้วยฟังก์ชันเดียวกับ `make_video.py` (`timeline()`, `clip_mode()`) จึงตรงกับวิดีโอจริงเสมอ
+
+**ในไฟล์มี**
+
+1. ข้อมูลสรุป: ขนาด, สไตล์, ความยาวรวม, วินาทีต่อฉาก, การเปลี่ยนภาพ, เพลง, โลโก้
+2. ข้อความที่แสดงตลอดวิดีโอ พร้อมช่วงเวลา (ชื่อโครงการ, ทำเล, ราคา, รายละเอียด)
+3. ตารางฉาก — แต่ละฉากมี:
+   - รูปย่อ (ตัดตามสัดส่วนจอเหมือนวิดีโอ)
+   - เวลาเริ่ม–จบ (วินาที)
+   - ไฟล์รูป, การเคลื่อนกล้อง (ซูม / แพนซ้าย→ขวา / วางกลาง + พื้นเบลอ), การเปลี่ยนภาพไปฉากถัดไป
+   - ข้อความบนจอ (ชื่อ, ทำเล, ป้ายคำบรรยาย)
+4. ฉากปิด: โลโก้, ราคา, ข้อมูลติดต่อ
+5. ตารางบอกว่าต้องแก้ค่าไหนใน `config.json`
+
+**ไฟล์ที่ได้**
+
+```
+projects/<รหัส>_<ชื่อ>/output/<ชื่อ>_<สไตล์>_<ขนาด>_storyboard.md
+projects/<รหัส>_<ชื่อ>/output/storyboard/<สไตล์>_<ขนาด>/scene01.jpg ... outro.jpg
+```
+
+**ขั้นตอนที่แนะนำ:** สร้างสตอรี่บอร์ด → ตรวจ → แก้ `config.json` (ลำดับรูป, ป้าย, ข้อความ) → สร้างสตอรี่บอร์ดใหม่ → พอใจแล้วค่อยสร้างวิดีโอ
+(สตอรี่บอร์ดเป็นไฟล์อ่านอย่างเดียว — แก้ในไฟล์ .md จะไม่มีผลกับวิดีโอ)
 
 ---
 
