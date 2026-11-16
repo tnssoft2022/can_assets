@@ -277,7 +277,7 @@ def load_project(project_dir, style_override=None, upscale_images=True):
         if not os.path.exists(p):
             sys.exit(f"ไม่พบรูป {p}")
         # ลบลายน้ำ/ตัดขอบตาม "remove" / "crop" ของรูปนี้ (ถ้ามี) — ทำก่อนขยายด้วย AI
-        p = cleanup.clean(p, it)
+        p = cleanup.clean(p, it, os.path.join(project_dir, "cache", "cleaned"))
         # "file" = ชื่อไฟล์เดิม (path อาจเปลี่ยนเป็นไฟล์ใน cache หลังลบลายน้ำ/ขยายรูปด้วย AI)
         images.append({"path": p, "file": it["file"], "caption": it.get("caption", "")})
     if not images:
@@ -301,7 +301,7 @@ def load_project(project_dir, style_override=None, upscale_images=True):
         import upscale
         if upscale.available():
             for img in images:
-                img["path"] = upscale.upscale(img["path"])
+                img["path"] = upscale.upscale(img["path"], cache_dir=os.path.join(project_dir, "cache", "upscaled"))
         else:
             print(f"  ! ข้ามการขยายรูปด้วย AI: {upscale.status()}")
 

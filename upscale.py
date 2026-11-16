@@ -3,7 +3,8 @@
 ขยายรูปด้วย AI (Real-ESRGAN x4plus) ให้คมขึ้นก่อนนำไปทำวิดีโอ/โปสต์
 
 - ขยายเฉพาะรูปที่ด้านยาวเล็กกว่า MIN_LONG_SIDE (รูปใหญ่พออยู่แล้วจะใช้ต้นฉบับ)
-- เก็บผลไว้ใน cache/upscaled/ ใช้ซ้ำได้ ไม่ต้องขยายใหม่ (ถ้ารูปต้นฉบับเปลี่ยนจะขยายใหม่เอง)
+- เก็บผลไว้ใน projects/<โครงการ>/cache/upscaled/ ใช้ซ้ำได้ ไม่ต้องขยายใหม่
+  (ชื่อไฟล์คำนวณจากเนื้อหารูป → ย้าย/เปลี่ยนชื่อโฟลเดอร์ได้, ถ้ารูปต้นฉบับเปลี่ยนจะขยายใหม่เอง)
 - ถ้าไม่มีโปรแกรมใน tools/realesrgan/ จะข้ามขั้นตอนนี้และใช้รูปต้นฉบับ
 
 ใช้เดี่ยว ๆ ได้:
@@ -19,7 +20,7 @@ TOOL_DIR = os.path.join(HERE, "tools", "realesrgan")
 # Windows ใช้ไฟล์ .exe จาก realesrgan-ncnn-vulkan-<วันที่>-windows.zip / Mac ใช้รุ่น macos
 BIN = os.path.join(TOOL_DIR, "realesrgan-ncnn-vulkan" + (".exe" if os.name == "nt" else ""))
 MODEL = "realesrgan-x4plus"
-CACHE_DIR = os.path.join(HERE, "cache", "upscaled")
+CACHE_DIR = os.path.join(HERE, "cache", "upscaled")  # ใช้เฉพาะตอนรัน upscale.py เดี่ยว ๆ
 MIN_LONG_SIDE = 1920  # ด้านยาวของวิดีโอ 1080p
 
 
@@ -38,9 +39,9 @@ def status():
 
 
 def _key(path):
-    st = os.stat(path)
-    raw = f"{os.path.abspath(path)}|{st.st_size}|{int(st.st_mtime)}"
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    """ชื่อไฟล์ cache จากเนื้อหารูป (ไม่ขึ้นกับตำแหน่งไฟล์)"""
+    with open(path, "rb") as f:
+        return hashlib.sha1(f.read()).hexdigest()[:16]
 
 
 def _size(path):
@@ -52,8 +53,9 @@ def _size(path):
     return int(w), int(h)
 
 
-def upscale(path, quiet=False):
+def upscale(path, quiet=False, cache_dir=None):
     """คืนค่า path ของรูปที่ขยายแล้ว (หรือรูปเดิมถ้าไม่ต้อง/ทำไม่ได้)"""
+    cache_dir = cache_dir or CACHE_DIR
     if not available():
         return path
     try:
@@ -62,8 +64,8 @@ def upscale(path, quiet=False):
     except (subprocess.CalledProcessError, ValueError):
         return path
 
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    out = os.path.join(CACHE_DIR, _key(path) + ".jpg")
+    os.makedirs(cache_dir, exist_ok=True)
+    out = os.path.join(cache_dir, _key(path) + ".jpg")
     if os.path.exists(out):
         return out
 
