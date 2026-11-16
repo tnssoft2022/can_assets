@@ -44,6 +44,13 @@ def pick_image(cfg):
     return cfg["_images"][0]
 
 
+def above(y_top, fs_lower, fs_upper, boxed, gap=8):
+    """ตำแหน่ง y ของบรรทัดที่วางเหนือบรรทัดที่อยู่ที่ y_top โดยไม่ให้กล่องข้อความซ้อนกัน
+    (ข้อความไทยของ Kanit สูงราว 1.3 เท่าของขนาดฟอนต์ + ขอบกล่อง 0.38 เท่า)"""
+    pad = (int(fs_lower * 0.38) + int(fs_upper * 0.38)) if boxed else 0
+    return y_top - pad - gap - int(fs_upper * 1.3)
+
+
 def pick_images(cfg, count=4):
     """รูปหลัก + รูปเล็ก: จาก poster_images ถ้ามี ไม่งั้นรูปหลักตาม poster_image แล้วตามด้วยรูปถัดไป"""
     by_name = {i.get("file", os.path.basename(i["path"])): i for i in cfg["_images"]}
@@ -147,11 +154,10 @@ def render_collage(cfg, size, out_path, tmpdir):
     fs_loc = mv.fit_fontsize(t["location"], int(36 * s), max_w)
     y = main_h - int(m * 0.8)
     if t["location"]:
-        y -= fs_loc
+        y -= int(fs_loc * 1.3)
         tl.add(t["location"], fs_loc, m, y, a, b, color=th["sub"], box=box, bold=False)
-        y -= int(fs_loc * 0.75)
     if t["title"]:
-        y -= fs_title
+        y = above(y, fs_loc, fs_title, bool(box)) if t["location"] else y - int(fs_title * 1.3)
         tl.add(t["title"], fs_title, m, y, a, b, box=box)
     if t["tag"]:
         tl.add(t["tag"], int(36 * s), m, m + int(10 * s), a, b,
@@ -290,9 +296,8 @@ def render_poster(cfg, size, out_path, tmpdir):
     if location:
         y -= fs_loc
         tl.add(location, fs_loc, x0, y, a, b, color=th["sub"], box=box, bold=False)
-        y -= int(fs_loc * 0.8)
     if title:
-        y -= fs_title
+        y = above(y, fs_loc, fs_title, bool(box)) if location else y - int(fs_loc * 0.8) - fs_title
         tl.add(title, fs_title, x0, y, a, b, box=box)
     if tag:
         tl.add(tag, int(38 * s), x0, m + int(10 * s), a, b, color=th["caption_color"], box=cbox or box or "black@0.5")
