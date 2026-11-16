@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import unicodedata
+import zlib
 
 import cleanup
 
@@ -186,6 +187,30 @@ MOTIONS = ["zoom_in", "pan_right", "zoom_out", "pan_left"]
 
 LOGO_POSITIONS = ("top-right", "top-left", "bottom-right", "bottom-left")
 
+# แบบจัดวางของวิดีโอ (ค่าใน config ทับได้ ไม่ระบุ = เลือกจากรหัสโปรเจกต์ → โปรเจกต์เดิมได้แบบเดิมเสมอ)
+#   video_layout  classic = ชื่อบน ราคาล่าง / lower = ข้อความชิดซ้ายล่าง + แถบสี / band = แถบชื่อด้านบน
+#   intro         overlay = ชื่อทับรูปแรก / card = การ์ดชื่อโครงการเต็มจอก่อนเข้ารูป
+#   outro         center = รูปเบลอ + ข้อมูลกลางจอ / split = ครึ่งรูป ครึ่งข้อมูลติดต่อ
+VIDEO_LAYOUTS = ("classic", "lower", "band")
+INTRO_STYLES = ("overlay", "card")
+OUTRO_STYLES = ("center", "split")
+INTRO_CARD_SECONDS = 2.4
+
+
+def variant(cfg, key, options):
+    """ค่าใน config ถ้ามี (และไม่ใช่ "auto") ไม่งั้นเลือกจากชื่อโปรเจกต์แบบคงที่"""
+    val = cfg.get(key)
+    if val not in (None, "auto"):
+        if val not in options:
+            sys.exit(f"{key} ต้องเป็น: {', '.join(options)} หรือ auto")
+        return val
+    return options[zlib.crc32(f"{key}:{cfg.get('_name', '')}".encode("utf-8")) % len(options)]
+
+
+def panel_color(th):
+    """สีพื้นของแถบข้อมูล (โปสต์ / ฉากปิดแบบ split / แถบชื่อ)"""
+    return th.get("panel") or ("0xF7F5F2" if th.get("light") else "0x141414")
+
 
 # ---------------------------------------------------------------- helpers
 
@@ -326,6 +351,7 @@ def load_project(project_dir, style_override=None, upscale_images=True):
             theme[key] = cfg[key]
     cfg["_style"] = style
     cfg["_theme"] = theme
+    cfg["_name"] = os.path.basename(project_dir)
 
     img_dir = cfg.get("image_dir") or os.path.join(project_dir, "images")
     if not os.path.isabs(img_dir):
@@ -467,7 +493,12 @@ def timeline(cfg, fmt):
     D_OUT = float(cfg.get("outro_seconds", 4.5))
     # ความยาวแต่ละฉาก: อย่างน้อยเท่าค่าของสไตล์ และยาวพอให้เสียงพากย์ของฉากนั้นพูดจบก่อนเปลี่ยนภาพ
     durs = [max(D, img.get("voice_dur", 0) + VO_LEAD + VO_TAIL + T) if img.get("voice") else D for img in images]
-    starts = [0.0]
+    # แบบจัดวาง: ตำแหน่งข้อความใช้ได้เฉพาะแนวตั้ง / ฉากปิดแบบ split ใช้เฉพาะแนวตั้ง
+    layout = variant(cfg, "video_layout", VIDEO_LAYOUTS) if vertical else "classic"
+    intro = variant(cfg, "intro", INTRO_STYLES)
+    outro = variant(cfg, "outro", OUTRO_STYLES) if vertical else "center"
+    intro_dur = INTRO_CARD_SECONDS if intro == "card" else 0.0
+    starts = [intro_dur - T if intro_dur else 0.0]
     for d in durs:
         starts.append(starts[-1] + d - T)
     outro_start = starts[n]
@@ -480,7 +511,9 @@ def timeline(cfg, fmt):
         "durs": durs, "starts": starts,
         "outro_start": outro_start, "total": outro_start + D_OUT,
         "intro_end": intro_end,
-        "detail_start": intro_end + 0.1 if n > 1 else 0.8,
+        "detail_start": intro_end + 0.1 if n > 1 else starts[0] + 0.8,
+        "layout": layout, "intro": intro, "outro": outro, "intro_dur": intro_dur,
+        "text_start": starts[0],  # ข้อความบนรูปเริ่มเมื่อรูปแรกขึ้น (หลังการ์ดเปิด ถ้ามี)
         # แนวตั้ง: เติมภาพเต็มจอเสมอ (ปิดได้ด้วย "vertical_fill": false) / แนวนอน: รูปแนวตั้งวางกลาง + พื้นเบลอ
         "fill": bool(cfg.get("vertical_fill", True)) if vertical else bool(cfg.get("horizontal_fill", False)),
         "transition": th["transition"],
@@ -501,6 +534,9 @@ def render(cfg, fmt, out_path, tmpdir):
     args = ["ffmpeg", "-hide_banner", "-y", "-loglevel", "error", "-stats"]
     for img in images:
         args += ["-i", img["path"]]
+    card = tm["intro"] == "card"
+    if card:  # การ์ดเปิด: รูปแรกอีกชุด (input ลำดับ n) ทำเป็นพื้นเบลอ
+        args += ["-i", images[0]["path"]]
     parts = []
     last = n - 1
     parts.append(f"[{last}:v]split=2[last_a][last_b]")
@@ -511,21 +547,35 @@ def render(cfg, fmt, out_path, tmpdir):
         parts.append(build_clip(src, img, W, H, int(round(durs[i] * FPS)), MOTIONS[i % len(MOTIONS)],
                                 th["zoom"], f"c{i}", fill=fill, idx=i))
 
-    # ฉากปิด: รูปสุดท้ายเบลอ + ข้อมูลติดต่อ
-    parts.append(
-        f"[last_b]scale={W // 4}:{H // 4}:force_original_aspect_ratio=increase,crop={W // 4}:{H // 4},"
-        f"gblur=sigma=10,scale={W}:{H},eq={th['outro_eq']},"
-        f"loop=loop={frames_out - 1}:size=1,setpts=N/{FPS}/TB,fps={FPS},setsar=1,format=yuv420p[c{n}]"
-    )
+    def blurred(src, frames, label):
+        """รูปเบลอ + ปรับแสงตามสไตล์ ยาว frames เฟรม (พื้นของการ์ดเปิด / ฉากปิด)"""
+        return (f"[{src}]scale={W // 4}:{H // 4}:force_original_aspect_ratio=increase,crop={W // 4}:{H // 4},"
+                f"gblur=sigma=10,scale={W}:{H},eq={th['outro_eq']},"
+                f"loop=loop={frames - 1}:size=1,setpts=N/{FPS}/TB,fps={FPS},setsar=1,format=yuv420p[{label}]")
 
-    # ต่อคลิปด้วย xfade (ฉากปิดใช้ fade เสมอ)
+    # ฉากปิด: center = รูปสุดท้ายเบลอ + ข้อมูลกลางจอ / split = รูปครึ่งบน + แถบข้อมูลครึ่งล่าง
+    half = even(H / 2)
+    if tm["outro"] == "split":
+        parts.append(f"[last_b]scale={W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{half},"
+                     f"loop=loop={frames_out - 1}:size=1,setpts=N/{FPS}/TB,fps={FPS},setsar=1,format=yuv420p[otop]")
+        parts.append(f"color=c={panel_color(th)}:s={W}x{H - half}:r={FPS}:d={frames_out / FPS:.3f},"
+                     f"format=yuv420p[obot]")
+        parts.append(f"[otop][obot]vstack=inputs=2,setsar=1[c{n}]")
+    else:
+        parts.append(blurred("last_b", frames_out, f"c{n}"))
+
+    # ต่อคลิปด้วย xfade (การ์ดเปิด / ฉากปิดใช้ fade เสมอ)
     prev = "c0"
+    if card:
+        parts.append(blurred(f"{n}:v", int(round(tm["intro_dur"] * FPS)), "cin"))
+        parts.append(f"[cin][c0]xfade=transition=fade:duration={T}:offset={starts[0]:.3f}[x0]")
+        prev = "x0"
     for k in range(1, n + 1):
         tr = th["transition"] if k < n else "fade"
         parts.append(f"[{prev}][c{k}]xfade=transition={tr}:duration={T}:offset={starts[k]:.3f}[x{k}]")
         prev = f"x{k}"
     video = prev
-    input_idx = n
+    input_idx = n + (1 if card else 0)
 
     # เงาไล่สีด้านบน/ล่าง ให้ข้อความอ่านง่ายโดยไม่ต้องมีกล่อง
     if th["gradient"]:
@@ -542,6 +592,13 @@ def render(cfg, fmt, out_path, tmpdir):
         parts.append(f"[vg1][{input_idx + 1}:v]overlay=0:0:enable='lt(t,{outro_start + 0.5:.2f})'[vg2]")
         video = "vg2"
         input_idx += 2
+
+    # แถบชื่อด้านบน (band) วาดก่อนโลโก้ เพื่อให้โลโก้อยู่บนแถบ
+    band_h = int(H * 0.2)
+    if tm["layout"] == "band":
+        parts.append(f"[{video}]drawbox=x=0:y=0:w={W}:h={band_h}:color={panel_color(th)}@0.9:t=fill:"
+                     f"enable='between(t,{tm['text_start']:.2f},{outro_start:.2f})'[vband]")
+        video = "vband"
 
     # โลโก้
     logo_big_h = 0
@@ -560,18 +617,28 @@ def render(cfg, fmt, out_path, tmpdir):
         # มุมล่างในแนวตั้งชนกับข้อความ จึงยกขึ้นเหนือพื้นที่ข้อความ
         y = str(m) if pos.startswith("top") else (f"H-h-{int(H * 0.06)}" if not vertical else f"H-h-{int(H * 0.27)}")
         corner_end = outro_start + 0.3
-        parts.append(f"[{input_idx}:v]format=rgba,split=2[lg1][lg2]")
+        logo_outro = cfg.get("logo_outro", True)
+        outs = ["lg1"] + (["lg2"] if logo_outro else []) + (["lg3"] if card else [])
+        parts.append(f"[{input_idx}:v]format=rgba,split={len(outs)}" + "".join(f"[{o}]" for o in outs))
         parts.append(f"[lg1]scale={lw}:-1,colorchannelmixer=aa={float(cfg.get('logo_opacity', 0.92))}[logo]")
-        parts.append(f"[{video}][logo]overlay={x}:{y}:enable='lt(t,{corner_end:.2f})'[vlogo]")
+        parts.append(f"[{video}][logo]overlay={x}:{y}:enable='between(t,{tm['text_start']:.2f},{corner_end:.2f})'[vlogo]")
         video = "vlogo"
-        if cfg.get("logo_outro", True):
-            bw = W * (0.42 if vertical else 0.22)
-            max_h = H * (0.17 if vertical else 0.20)
-            if bw * lh_ / lw_ > max_h:
-                bw = max_h * lw_ / lh_
-            bw = even(bw)
-            logo_big_h = int(bw * lh_ / lw_)
-            by = int(H * (0.10 if vertical else 0.07))
+        bw = W * (0.42 if vertical else 0.22)
+        max_h = H * (0.17 if vertical else 0.20)
+        if bw * lh_ / lw_ > max_h:
+            bw = max_h * lw_ / lh_
+        bw = even(bw)
+        big_h = int(bw * lh_ / lw_)
+        if card:  # โลโก้ใหญ่บนการ์ดเปิด เฟดออกพร้อมการเปลี่ยนเข้ารูปแรก
+            cy = int(H * (0.20 if vertical else 0.12))
+            parts.append(f"[lg3]scale={bw}:-1,fade=t=in:st=0.1:d=0.5:alpha=1,"
+                         f"fade=t=out:st={starts[0]:.2f}:d={T:.2f}:alpha=1[logocard]")
+            parts.append(f"[{video}][logocard]overlay=(W-w)/2:{cy}:enable='lt(t,{starts[0] + T:.2f})'[vlogo1]")
+            video = "vlogo1"
+        if logo_outro:
+            logo_big_h = big_h
+            # split: โลโก้คร่อมรอยต่อระหว่างรูปกับแถบข้อมูล
+            by = half - big_h // 2 if tm["outro"] == "split" else int(H * (0.10 if vertical else 0.07))
             parts.append(f"[lg2]scale={bw}:-1,fade=t=in:st={outro_start + 0.2:.2f}:d=0.6:alpha=1[logobig]")
             parts.append(f"[{video}][logobig]overlay=(W-w)/2:{by}:enable='gte(t,{outro_start:.2f})'[vlogo2]")
             video = "vlogo2"
@@ -590,56 +657,127 @@ def render(cfg, fmt, out_path, tmpdir):
     box, pbox, cbox = th["box"], th["price_box"], th["caption_box"]
     pcol, ccol = th["price_color"], th["caption_color"]
 
-    if vertical:
-        cx = "(w-text_w)/2"
-        tl.add(title, fit_fontsize(title, int(70 * s), max_w), cx, 268, 0.3, intro_end, box=box)
-        tl.add(location, fit_fontsize(location, int(44 * s), max_w), cx, 383, 0.6, intro_end,
+    t0 = tm["text_start"]
+    layout = tm["layout"]
+    light = th.get("light", False)
+    cx = "(w-text_w)/2"
+    if vertical and layout == "classic":  # ชื่อบนกลางจอ ราคาล่าง
+        tl.add(title, fit_fontsize(title, int(70 * s), max_w), cx, 268, t0 + 0.3, intro_end, box=box)
+        tl.add(location, fit_fontsize(location, int(44 * s), max_w), cx, 383, t0 + 0.6, intro_end,
                color=th["sub"], box=box, bold=False)
         if th["separator"]:
-            tl.line(W // 2 - 60, 463, 120, 3, 0.8, intro_end)
-        tl.add(price, fit_fontsize(price, int(88 * s), max_w), cx, H - 430, 0.6, outro_start, color=pcol, box=pbox)
+            tl.line(W // 2 - 60, 463, 120, 3, t0 + 0.8, intro_end)
+        tl.add(price, fit_fontsize(price, int(88 * s), max_w), cx, H - 430, t0 + 0.6, outro_start, color=pcol, box=pbox)
         tl.add(details, fit_fontsize(details, int(44 * s), max_w), cx, H - 300, detail_start, outro_start,
                color=th["sub"], box=box, bold=False)
         for i, img in enumerate(images):
             st = starts[i] + (0.3 if i else 0.5)
             tl.add(img["caption"], int(42 * s), cx, H - 560 if i else 518, st, starts[i + 1],
                    color=ccol, box=cbox)
+    elif vertical and layout == "lower":  # ข้อความทั้งหมดชิดซ้ายล่าง + แถบสีแนวตั้ง
+        x0 = int(W * 0.085)
+        lw_max = W - x0 - int(W * 0.06)
+        tl.line(x0 - int(W * 0.035), H - 660, max(6, int(8 * s)), 420, t0 + 0.3, outro_start)
+        tl.add(title, fit_fontsize(title, int(70 * s), lw_max), x0, H - 650, t0 + 0.3, intro_end, box=box)
+        tl.add(location, fit_fontsize(location, int(42 * s), lw_max), x0, H - 545, t0 + 0.6, intro_end,
+               color=th["sub"], box=box, bold=False)
+        tl.add(price, fit_fontsize(price, int(84 * s), lw_max), x0, H - 430, t0 + 0.6, outro_start, color=pcol, box=pbox)
+        tl.add(details, fit_fontsize(details, int(40 * s), lw_max), x0, H - 300, detail_start, outro_start,
+               color=th["sub"], box=box, bold=False)
+        for i, img in enumerate(images):  # ฉากแรกป้ายอยู่บน (ล่างมีชื่อแล้ว) ฉากต่อไปใช้ที่ของชื่อ
+            st = starts[i] + (0.3 if i else 0.5)
+            tl.add(img["caption"], fit_fontsize(img["caption"], int(42 * s), lw_max), x0, H - 650 if i else 268,
+                   st, starts[i + 1], color=ccol, box=cbox)
+    elif vertical:  # band: แถบชื่อโครงการด้านบนตลอดวิดีโอ
+        bh = band_h
+        x0 = int(W * 0.055)
+        logo_room = (even(W * float(cfg.get("logo_size") or 0.17)) + int(W * 0.07)) if cfg["_logo"] else x0
+        bmax = W - x0 - logo_room
+        tl.line(0, bh - 8, W, 8, t0, outro_start)
+        band_text, band_sub = (th["outro_text"], th["sub"]) if light else ("white", "white@0.8")
+        ft = fit_fontsize(title, int(64 * s), bmax)
+        fl = fit_fontsize(location, int(38 * s), bmax)
+        block = int(ft * 1.3) + (12 + int(fl * 1.3) if location else 0)
+        ty = (bh - 8 - block) // 2
+        tl.add(title, ft, x0, ty, t0 + 0.3, outro_start, color=band_text)
+        tl.add(location, fl, x0, ty + int(ft * 1.3) + 12, t0 + 0.5, outro_start, color=band_sub, bold=False)
+        lmax = W - 2 * x0
+        tl.add(price, fit_fontsize(price, int(84 * s), lmax), x0, H - 430, t0 + 0.6, outro_start, color=pcol, box=pbox)
+        tl.add(details, fit_fontsize(details, int(40 * s), lmax), x0, H - 300, t0 + 0.8, outro_start,
+               color=th["sub"], box=box, bold=False)
+        for i, img in enumerate(images):
+            tl.add(img["caption"], fit_fontsize(img["caption"], int(42 * s), lmax), x0, H - 560,
+                   starts[i] + 0.4, starts[i + 1], color=ccol, box=cbox)
     else:
         x0 = int(80 * s)
-        tl.add(title, fit_fontsize(title, int(68 * s), max_w), x0, H - 385, 0.3, intro_end, box=box)
-        tl.add(location, fit_fontsize(location, int(40 * s), max_w), x0, H - 268, 0.6, intro_end,
+        tl.add(title, fit_fontsize(title, int(68 * s), max_w), x0, H - 385, t0 + 0.3, intro_end, box=box)
+        tl.add(location, fit_fontsize(location, int(40 * s), max_w), x0, H - 268, t0 + 0.6, intro_end,
                color=th["sub"], box=box, bold=False)
-        tl.add(price, fit_fontsize(price, int(64 * s), W * 0.5), x0, H - 160, 0.6, outro_start, color=pcol, box=pbox)
+        tl.add(price, fit_fontsize(price, int(64 * s), W * 0.5), x0, H - 160, t0 + 0.6, outro_start, color=pcol, box=pbox)
         tl.add(details, fit_fontsize(details, int(40 * s), max_w), x0, H - 268, detail_start, outro_start,
                color=th["sub"], box=box, bold=False)
         if th["separator"] and not pbox:
-            tl.line(x0, H - 185, 90, 3, 0.8, outro_start)
+            tl.line(x0, H - 185, 90, 3, t0 + 0.8, outro_start)
         for i, img in enumerate(images):
             st = starts[i] + 0.3
             tl.add(img["caption"], int(40 * s), x0, int(70 * s), st, starts[i + 1], color=ccol, box=cbox)
 
-    # ฉากปิด (เลื่อนข้อความลงถ้ามีโลโก้ใหญ่)
-    a, b = outro_start + 0.3, total
-    cx = "(w-text_w)/2"
-    if vertical:
-        ys = [0.30, 0.40, 0.55, 0.63, 0.72] if logo_big_h else [0.27, 0.37, 0.52, 0.60, 0.69]
-    else:
-        ys = [0.32, 0.43, 0.59, 0.68, 0.78] if logo_big_h else [0.20, 0.33, 0.52, 0.62, 0.73]
     ot, op = th["outro_text"], th["outro_price"]
     opbox = th.get("outro_price_box")
-    tl.add(title, fit_fontsize(title, int(62 * s), W * 0.86), cx, int(H * ys[0]), a, b, color=ot)
-    tl.add(price, fit_fontsize(price, int(84 * s), W * 0.86), cx, int(H * ys[1]), a + 0.2, b, color=op, box=opbox)
-    if th["separator"]:
-        sep_y = int(H * (ys[1] + ys[2]) / 2) + int(30 * s)
-        tl.line(W // 2 - 70, sep_y, 140, 3, a + 0.3, b, color="accent" if th["outro_text"] == "white" else "0x222222")
+
+    # การ์ดเปิด: ชื่อ ทำเล ราคา กลางจอ (ใต้โลโก้ใหญ่)
+    if card:
+        ca, cb = 0.3, starts[0] + T * 0.6
+        fct = fit_fontsize(title, int(72 * s), W * 0.86)
+        y = int(H * 0.45)
+        tl.add(title, fct, cx, y, ca, cb, color=ot)
+        y += int(fct * 1.45)
+        if location:
+            fcl = fit_fontsize(location, int(44 * s), W * 0.86)
+            tl.add(location, fcl, cx, y, ca + 0.2, cb, color=ot, bold=False)
+            y += int(fcl * 1.5)
+        if th["separator"]:
+            tl.line(W // 2 - 70, y + int(10 * s), 140, 3, ca + 0.3, cb, color="accent" if ot == "white" else "0x222222")
+            y += int(40 * s)
+        fcp = fit_fontsize(price, int(80 * s), W * 0.86)
+        tl.add(price, fcp, cx, y + (int(fcp * 0.38) if opbox else 0) + int(10 * s), ca + 0.4, cb, color=op, box=opbox)
+
+    # ฉากปิด
+    a, b = outro_start + 0.3, total
     name = contact.get("name", "")
-    tl.add(name, fit_fontsize(name, int(46 * s), W * 0.86), cx, int(H * ys[2]), a + 0.4, b, color=ot, bold=False)
     phone = contact.get("phone", "")
     phone_txt = ("โทร " + phone) if phone else ""
-    tl.add(phone_txt, fit_fontsize(phone_txt, int(62 * s), W * 0.86), cx, int(H * ys[3]), a + 0.5, b, color=ot)
     line = contact.get("line", "")
     line_txt = ("LINE: " + line) if line else ""
-    tl.add(line_txt, fit_fontsize(line_txt, int(46 * s), W * 0.86), cx, int(H * ys[4]), a + 0.6, b, color=ot, bold=False)
+    if tm["outro"] == "split":  # ข้อมูลเรียงในครึ่งล่าง ใต้โลโก้ที่คร่อมรอยต่อ
+        y = half + (logo_big_h // 2 + int(40 * s) if logo_big_h else int(70 * s))
+        ft = fit_fontsize(title, int(62 * s), W * 0.86)
+        tl.add(title, ft, cx, y, a, b, color=ot)
+        y += int(ft * 1.35) + int(24 * s)
+        fp = fit_fontsize(price, int(84 * s), W * 0.86)
+        bp = int(fp * 0.38) if opbox else 0
+        tl.add(price, fp, cx, y + bp, a + 0.2, b, color=op, box=opbox)
+        y += fp + 2 * bp + int(34 * s)
+        fn = fit_fontsize(name, int(46 * s), W * 0.86)
+        tl.add(name, fn, cx, y, a + 0.4, b, color=ot, bold=False)
+        y += int(fn * 1.4) + int(10 * s)
+        fph = fit_fontsize(phone_txt, int(62 * s), W * 0.86)
+        tl.add(phone_txt, fph, cx, y, a + 0.5, b, color=ot)
+        y += int(fph * 1.4)
+        tl.add(line_txt, fit_fontsize(line_txt, int(46 * s), W * 0.86), cx, y, a + 0.6, b, color=ot, bold=False)
+    else:  # center: เลื่อนข้อความลงถ้ามีโลโก้ใหญ่
+        if vertical:
+            ys = [0.30, 0.40, 0.55, 0.63, 0.72] if logo_big_h else [0.27, 0.37, 0.52, 0.60, 0.69]
+        else:
+            ys = [0.32, 0.43, 0.59, 0.68, 0.78] if logo_big_h else [0.20, 0.33, 0.52, 0.62, 0.73]
+        tl.add(title, fit_fontsize(title, int(62 * s), W * 0.86), cx, int(H * ys[0]), a, b, color=ot)
+        tl.add(price, fit_fontsize(price, int(84 * s), W * 0.86), cx, int(H * ys[1]), a + 0.2, b, color=op, box=opbox)
+        if th["separator"]:
+            sep_y = int(H * (ys[1] + ys[2]) / 2) + int(30 * s)
+            tl.line(W // 2 - 70, sep_y, 140, 3, a + 0.3, b, color="accent" if th["outro_text"] == "white" else "0x222222")
+        tl.add(name, fit_fontsize(name, int(46 * s), W * 0.86), cx, int(H * ys[2]), a + 0.4, b, color=ot, bold=False)
+        tl.add(phone_txt, fit_fontsize(phone_txt, int(62 * s), W * 0.86), cx, int(H * ys[3]), a + 0.5, b, color=ot)
+        tl.add(line_txt, fit_fontsize(line_txt, int(46 * s), W * 0.86), cx, int(H * ys[4]), a + 0.6, b, color=ot, bold=False)
 
     if tl.filters:
         parts.append(f"[{video}]" + ",".join(tl.filters) + "[vtxt]")
@@ -692,7 +830,8 @@ def render(cfg, fmt, out_path, tmpdir):
              "-t", f"{total:.2f}", "-r", str(FPS),
              "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
              "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out_path]
-    print(f"▶ กำลังสร้าง {fmt} สไตล์ {cfg['_style']} ({W}x{H}, {total:.1f} วินาที, {n} รูป) ...")
+    print(f"▶ กำลังสร้าง {fmt} สไตล์ {cfg['_style']} ({W}x{H}, {total:.1f} วินาที, {n} รูป) "
+          f"แบบ {tm['layout']} / เปิด {tm['intro']} / ปิด {tm['outro']} ...")
     subprocess.run(args, check=True)
     print(f"✓ เสร็จแล้ว: {out_path}")
 

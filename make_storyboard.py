@@ -82,6 +82,11 @@ def narr_cell(text, dur):
     return f"🔊 {cell(text)}" + (f"<br>({dur:.1f} วิ)" if dur else "")
 
 
+LAYOUT_NAMES = {"classic": "ชื่อบน ราคาล่าง", "lower": "ชิดซ้ายล่าง + แถบสี", "band": "แถบชื่อด้านบน"}
+INTRO_NAMES = {"overlay": "ชื่อทับรูปแรก", "card": "การ์ดชื่อโครงการ"}
+OUTRO_NAMES = {"center": "ข้อมูลกลางจอ", "split": "ครึ่งรูป ครึ่งข้อมูล"}
+
+
 def cell(text):
     """ข้อความในตาราง Markdown: กัน | และขึ้นบรรทัดใหม่"""
     return text.replace("|", "\\|").replace("\n", "<br>")
@@ -121,18 +126,22 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         f"{' (เบาลงอัตโนมัติตอนมีเสียงพากย์)' if cfg['_music'] and has_vo else ''} |",
         f"| เสียงพากย์ | {vo_line} |",
         f"| โลโก้ | {'มุมขวาบนตลอดวิดีโอ + โลโก้ใหญ่ในฉากปิด' if cfg['_logo'] else 'ไม่มี'} |",
+        f"| แบบจัดวาง | ข้อความ: {LAYOUT_NAMES[tm['layout']]} (`{tm['layout']}`) · "
+        f"ฉากเปิด: {INTRO_NAMES[tm['intro']]} (`{tm['intro']}`) · ฉากปิด: {OUTRO_NAMES[tm['outro']]} (`{tm['outro']}`) |",
         "",
         "## ข้อความที่แสดงตลอดวิดีโอ",
         "",
         "| ข้อความ | ช่วงเวลา (วินาที) |",
         "|---|---|",
     ]
+    t0 = tm["text_start"]
+    title_end = tm["outro_start"] if tm["layout"] == "band" else tm["intro_end"]
     if title:
-        lines.append(f"| ชื่อโครงการ: {cell(title)} | {t(0.3)} – {t(tm['intro_end'])} |")
+        lines.append(f"| ชื่อโครงการ: {cell(title)} | {t(t0 + 0.3)} – {t(title_end)} |")
     if location:
-        lines.append(f"| ทำเล: {cell(location)} | {t(0.6)} – {t(tm['intro_end'])} |")
+        lines.append(f"| ทำเล: {cell(location)} | {t(t0 + 0.6)} – {t(title_end)} |")
     if price:
-        lines.append(f"| ราคา: **{cell(price)}** | {t(0.6)} – {t(tm['outro_start'])} |")
+        lines.append(f"| ราคา: **{cell(price)}** | {t(t0 + 0.6)} – {t(tm['outro_start'])} |")
     if details:
         lines.append(f"| รายละเอียด: {cell(details)} | {t(tm['detail_start'])} – {t(tm['outro_start'])} |")
 
@@ -143,6 +152,11 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         "| ฉาก | ภาพ | เวลา (วินาที) | รูป / กล้อง | ข้อความบนจอ | เสียงพากย์ |",
         "|---|---|---|---|---|---|",
     ]
+    if tm["intro"] == "card":
+        card_texts = [x for x in ["โลโก้ใหญ่" if cfg["_logo"] else "", f"**{title}**" if title else "",
+                                  location, f"**{price}**" if price else ""] if x]
+        lines.append(f"| เปิด | — | 0.0 – {t(tm['intro_dur'])} | การ์ดชื่อโครงการบนรูปแรกแบบเบลอ<br>→ เฟดเข้าฉาก 1 | "
+                     f"{cell('<br>'.join(card_texts))} | — |")
     for i, img in enumerate(images):
         thumb = f"scene{i + 1:02d}.jpg"
         make_thumb(img, i, tm, os.path.join(thumb_dir, thumb))
@@ -174,7 +188,7 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
     make_thumb(images[-1], len(images) - 1, tm, os.path.join(thumb_dir, "outro.jpg"), outro=True)
     lines.append(
         f"| ปิด | ![ฉากปิด]({thumb_rel}/outro.jpg) | {t(tm['outro_start'])} – {t(tm['total'])} | "
-        f"รูปสุดท้ายแบบเบลอ + มืดลง<br>เฟดดำตอนจบ | {cell('<br>'.join(outro_texts))} | "
+        f"{'รูปสุดท้ายครึ่งบน + แถบข้อมูลครึ่งล่าง' if tm['outro'] == 'split' else 'รูปสุดท้ายแบบเบลอ + มืดลง'}<br>เฟดดำตอนจบ | {cell('<br>'.join(outro_texts))} | "
         f"{narr_cell(cfg.get('outro_narration'), cfg.get('_outro_voice_dur'))} |")
 
     lines += [
@@ -193,6 +207,7 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         "| ชื่อ / ทำเล / ราคา / รายละเอียด | `title`, `location`, `price`, `details` |",
         "| ความยาวต่อฉาก / การเปลี่ยนภาพ | `seconds_per_image`, `transition`, `transition_seconds` |",
         "| ความยาวฉากปิด / ข้อมูลติดต่อ | `outro_seconds`, `contact` |",
+        "| ตำแหน่งข้อความ / ฉากเปิด / ฉากปิด | `video_layout` (classic/lower/band), `intro` (overlay/card), `outro` (center/split) |",
         "",
         f"สร้างวิดีโอจริงตามสตอรี่บอร์ดนี้: `python3 make_video.py <โฟลเดอร์โปรเจกต์> --style {style} {fmt}`",
         "",
