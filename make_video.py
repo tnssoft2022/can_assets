@@ -26,6 +26,8 @@ import subprocess
 import sys
 import unicodedata
 
+import cleanup
+
 FPS = 30
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -274,7 +276,9 @@ def load_project(project_dir, style_override=None, upscale_images=True):
         p = os.path.join(img_dir, it["file"])
         if not os.path.exists(p):
             sys.exit(f"ไม่พบรูป {p}")
-        # "file" = ชื่อไฟล์เดิม (path อาจเปลี่ยนเป็นไฟล์ใน cache หลังขยายรูปด้วย AI)
+        # ลบลายน้ำ/ตัดขอบตาม "remove" / "crop" ของรูปนี้ (ถ้ามี) — ทำก่อนขยายด้วย AI
+        p = cleanup.clean(p, it)
+        # "file" = ชื่อไฟล์เดิม (path อาจเปลี่ยนเป็นไฟล์ใน cache หลังลบลายน้ำ/ขยายรูปด้วย AI)
         images.append({"path": p, "file": it["file"], "caption": it.get("caption", "")})
     if not images:
         sys.exit(f"ไม่มีรูปในโฟลเดอร์ {img_dir}")
