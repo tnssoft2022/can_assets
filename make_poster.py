@@ -39,14 +39,14 @@ def pick_image(cfg):
     want = cfg.get("poster_image")
     if want:
         for img in cfg["_images"]:
-            if os.path.basename(img["path"]) == want:
+            if img.get("file", os.path.basename(img["path"])) == want:
                 return img
     return cfg["_images"][0]
 
 
 def pick_images(cfg, count=4):
     """รูปหลัก + รูปเล็ก: จาก poster_images ถ้ามี ไม่งั้นรูปหลักตาม poster_image แล้วตามด้วยรูปถัดไป"""
-    by_name = {os.path.basename(i["path"]): i for i in cfg["_images"]}
+    by_name = {i.get("file", os.path.basename(i["path"])): i for i in cfg["_images"]}
     if cfg.get("poster_images"):
         chosen = [by_name[n] for n in cfg["poster_images"] if n in by_name]
         if chosen:

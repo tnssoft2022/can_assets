@@ -274,7 +274,8 @@ def load_project(project_dir, style_override=None, upscale_images=True):
         p = os.path.join(img_dir, it["file"])
         if not os.path.exists(p):
             sys.exit(f"ไม่พบรูป {p}")
-        images.append({"path": p, "caption": it.get("caption", "")})
+        # "file" = ชื่อไฟล์เดิม (path อาจเปลี่ยนเป็นไฟล์ใน cache หลังขยายรูปด้วย AI)
+        images.append({"path": p, "file": it["file"], "caption": it.get("caption", "")})
     if not images:
         sys.exit(f"ไม่มีรูปในโฟลเดอร์ {img_dir}")
 

@@ -134,7 +134,7 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
             texts.append(location)
         if img.get("caption"):
             texts.append(f"ป้าย: {img['caption']}")
-        src = os.path.basename(img.get("source", img["path"]))
+        src = img.get("file", os.path.basename(img["path"]))
         cam = camera_text(img, i, tm)
         nxt = f"<br>→ {tr}" if i < len(images) - 1 else "<br>→ เฟดเข้าฉากปิด"
         lines.append(
