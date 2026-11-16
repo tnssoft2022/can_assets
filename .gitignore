@@ -1,0 +1,24 @@
+# --- ผลลัพธ์ (สร้างใหม่ได้ทุกเมื่อ) ---
+projects/*/output/
+cache/
+
+# --- โปรแกรมภายนอก (ติดตั้งตาม README) ---
+tools/
+
+# --- ค่าเฉพาะเครื่อง (ใช้ settings.example.json เป็นแม่แบบ) ---
+settings.json
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- ไฟล์ระบบ macOS / Windows ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- โปรแกรมแก้โค้ด ---
+.vscode/
+.idea/
