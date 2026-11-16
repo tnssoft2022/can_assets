@@ -236,6 +236,7 @@ def load_brand():
 
 
 def load_project(project_dir, style_override=None, upscale_images=True):
+    project_dir = os.path.abspath(project_dir)
     cfg_path = os.path.join(project_dir, "config.json")
     if not os.path.exists(cfg_path):
         sys.exit(f"ไม่พบ {cfg_path}")
