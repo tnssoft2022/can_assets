@@ -28,10 +28,12 @@ import re
 import shutil
 import subprocess
 import sys
+import hashlib
 import unicodedata
 import zlib
 
 import cleanup
+import grade
 
 FPS = 30
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -93,6 +95,7 @@ THEMES = {
         "caption_color": "accent", "price_color": "accent",
         "bold": False, "gradient": True, "separator": True,
         "transition": "fade", "transition_seconds": 1.0, "seconds_per_image": 4.0,
+        "transitions": ["fade", "smoothup", "dissolve"],
         "zoom": 0.10,
         "outro_eq": "brightness=-0.45:saturation=0.5",
         "outro_text": "white", "outro_price": "accent",
@@ -105,6 +108,7 @@ THEMES = {
         "caption_color": "white", "price_color": "white",
         "bold": True, "gradient": False, "separator": False,
         "transition": "slideleft", "transition_seconds": 0.45, "seconds_per_image": 2.8,
+        "transitions": ["slideleft", "slideup", "zoomin", "smoothleft"],
         "zoom": 0.22,
         "outro_eq": "brightness=-0.30:saturation=0.8",
         "outro_text": "white", "outro_price": "white",
@@ -118,6 +122,7 @@ THEMES = {
         "caption_color": "0x222222", "price_color": "0x111111",
         "bold": False, "gradient": False, "separator": True,
         "transition": "fade", "transition_seconds": 0.8, "seconds_per_image": 3.5,
+        "transitions": ["fade", "smoothup", "dissolve"],
         "zoom": 0.12,
         "outro_eq": "brightness=0.28:saturation=0.25:contrast=0.7",
         "outro_text": "0x222222", "outro_price": "0x111111",
@@ -132,6 +137,7 @@ THEMES = {
         "caption_color": "0x111111", "price_color": "0x111111",
         "bold": True, "gradient": False, "separator": False,
         "transition": "zoomin", "transition_seconds": 0.35, "seconds_per_image": 2.5,
+        "transitions": ["zoomin", "slideleft", "slideup", "circleopen"],
         "zoom": 0.25,
         "outro_eq": "brightness=-0.42:saturation=0.6",
         "outro_text": "white", "outro_price": "0x111111", "outro_price_box": "accent@1.0",
@@ -145,6 +151,7 @@ THEMES = {
         "caption_color": "accent", "price_color": "white",
         "bold": False, "gradient": False, "separator": True,
         "transition": "fade", "transition_seconds": 1.0, "seconds_per_image": 4.0,
+        "transitions": ["fade", "smoothleft", "dissolve"],
         "zoom": 0.08,
         "outro_eq": "brightness=0.22:saturation=0.45:contrast=0.75",
         "outro_text": "0x2F3A2A", "outro_price": "white", "outro_price_box": "accent@0.95",
@@ -159,6 +166,7 @@ THEMES = {
         "caption_color": "white", "price_color": "0x14213D",
         "bold": True, "gradient": False, "separator": False,
         "transition": "wipeleft", "transition_seconds": 0.6, "seconds_per_image": 3.2,
+        "transitions": ["wipeleft", "wipeup", "slideleft"],
         "zoom": 0.10,
         "outro_eq": "brightness=-0.42:saturation=0.4",
         "outro_text": "white", "outro_price": "0x14213D", "outro_price_box": "white@0.96",
@@ -172,6 +180,7 @@ THEMES = {
         "caption_color": "accent", "price_color": "accent",
         "bold": False, "gradient": True, "separator": True,
         "transition": "fadeblack", "transition_seconds": 0.8, "seconds_per_image": 3.8,
+        "transitions": ["fadeblack", "smoothup", "fade"],
         "zoom": 0.12,
         "outro_eq": "brightness=-0.58:saturation=0.3",
         "outro_text": "white", "outro_price": "accent",
@@ -205,6 +214,79 @@ def variant(cfg, key, options):
             sys.exit(f"{key} ต้องเป็น: {', '.join(options)} หรือ auto")
         return val
     return options[zlib.crc32(f"{key}:{cfg.get('_name', '')}".encode("utf-8")) % len(options)]
+
+
+# ---------------------------------------------------------------- ภาพเคลื่อนไหว (motion.py)
+# ใช้ได้เมื่อมี .venv (ติดตั้งตาม README) — ไม่มี = ใช้การซูม/แพนของ ffmpeg แบบเดิม
+# ตั้งต่อรูปใน config ได้: "motion" (push/pull/pan_left/pan_right/rise), "focus" [x, y] 0..1,
+# "effects" ["water", "sky"] ([] = ปิด), "sweep" true/false, "parallax" 0..2, "with" "08.jpg" (แบ่งจอ 2 รูป)
+# ปิดทั้งหมดด้วย "animate": false
+MOTION_TYPES = ("push", "pull", "pan_left", "pan_right", "rise")
+MOTION_VERSION = 3
+
+
+def venv_python():
+    for p in (os.path.join(HERE, ".venv", "bin", "python"), os.path.join(HERE, ".venv", "Scripts", "python.exe")):
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def analysis_dir(cache_dir, src):
+    """โฟลเดอร์ผลวิเคราะห์ (ความลึก/ฟ้า/น้ำ) ของรูป ผูกกับไฟล์ต้นฉบับ + ค่าตัดขอบ/ลบลายน้ำ
+    (วิดีโอใช้รูปที่ขยายแล้ว สตอรี่บอร์ดใช้รูปเดิม — ทั้งคู่จึงหาผลเดียวกันเจอ)"""
+    path, spec = src
+    st = os.stat(path)
+    key = hashlib.sha1(f"{os.path.abspath(path)}|{st.st_size}|{int(st.st_mtime)}|{spec}|v1".encode()).hexdigest()[:10]
+    return os.path.join(cache_dir, f"{os.path.splitext(os.path.basename(path))[0]}-{key}")
+
+
+def analysis_targets(cfg):
+    """[(img, ชื่อคีย์, รูปที่ใช้จริง, โฟลเดอร์ผลวิเคราะห์)] ของทุกรูป รวมรูปแบ่งจอ"""
+    out = []
+    for img in cfg["_images"]:
+        out.append((img, "anim", img["path"], analysis_dir(cfg["_motion_cache"], img["src"])))
+        if img.get("with_path"):
+            out.append((img, "with_anim", img["with_path"], analysis_dir(cfg["_motion_cache"], img["with_src"])))
+    return out
+
+
+def load_analysis(cfg):
+    """อ่านผลวิเคราะห์ที่มีอยู่แล้วใน cache (ไม่ต้องใช้ .venv) → img["anim"]"""
+    for img, key, _, d in analysis_targets(cfg):
+        info = os.path.join(d, "info.json")
+        if os.path.exists(info):
+            with open(info, encoding="utf-8") as f:
+                img[key] = dict(json.load(f), dir=d)
+
+
+def scene_plan(cfg, img, i):
+    """การเคลื่อนไหวของฉาก: ค่าใน config ก่อน ไม่งั้นเลือกจากผลวิเคราะห์รูป"""
+    a = img.get("anim") or {}
+    sky, water = a.get("sky_frac", 0), a.get("water_frac", 0)
+    motion = img.get("motion")
+    if motion in (None, "auto"):
+        if i == 0:
+            motion = "push"                                   # ฉากเปิด: ซูมเข้าหาตัวทรัพย์
+        elif water > 0.05:
+            motion = "pan_right" if i % 2 else "pan_left"     # สระ/ทะเล: เลื่อนข้างให้เห็นน้ำกระเพื่อม
+        elif sky > 0.12:
+            motion = "rise"                                   # ภายนอกเห็นฟ้า: เงยกล้องขึ้น
+        else:
+            motion = ("pan_right", "push", "pan_left", "pull")[i % 4]
+    elif motion not in MOTION_TYPES:
+        sys.exit(f"motion ต้องเป็น: {', '.join(MOTION_TYPES)} หรือ auto")
+    effects = img.get("effects")
+    if effects is None:
+        effects = [e for e, ok in (("water", water > 0.03), ("sky", sky > 0.08)) if ok]
+    return {
+        "motion": motion,
+        "focus": img.get("focus") or a.get("focus") or [0.5, 0.5],
+        "effects": list(effects),
+        "sweep": bool(img.get("sweep", i == 0)),
+        "parallax": float(img.get("parallax", 1.0)) if a.get("depth") else 0.0,
+        "with": img.get("with_path"),
+    }
 
 
 def panel_color(th):
@@ -287,7 +369,9 @@ class TextLayer:
             f"fontsize={size}",
             f"fontcolor={color}",
             f"x={x}",
-            f"y={y}",
+            # ข้อความลอยขึ้นเข้าที่ตอนปรากฏ (รูปนิ่ง/โปสต์ start < 0 ไม่ขยับ)
+            f"y='{y}+{max(8, int(size * 0.5))}*pow(max(0,1-(t-{start:.2f})/0.45),3)'" if start >= 0 and
+            self.theme.get("text_motion", True) else f"y={y}",
             f"alpha='{fade_alpha(start, end)}'",
             f"enable='between(t,{start:.2f},{end:.2f})'",
         ]
@@ -369,7 +453,19 @@ def load_project(project_dir, style_override=None, upscale_images=True):
         # ลบลายน้ำ/ตัดขอบตาม "remove" / "crop" ของรูปนี้ (ถ้ามี) — ทำก่อนขยายด้วย AI
         p = cleanup.clean(p, it, os.path.join(project_dir, "cache", "cleaned"))
         # "file" = ชื่อไฟล์เดิม (path อาจเปลี่ยนเป็นไฟล์ใน cache หลังลบลายน้ำ/ขยายรูปด้วย AI)
-        images.append({"path": p, "file": it["file"], "caption": it.get("caption", "")})
+        entry = {"path": p, "file": it["file"], "caption": it.get("caption", ""),
+                 "src": (os.path.join(img_dir, it["file"]),
+                         json.dumps({"crop": it.get("crop"), "remove": it.get("remove")}, sort_keys=True))}
+        for k in ("motion", "focus", "effects", "sweep", "parallax", "grade"):
+            if k in it:
+                entry[k] = it[k]
+        if it.get("with"):  # แบ่งจอ: รูปที่สองในฉากเดียวกัน
+            wp = os.path.join(img_dir, it["with"])
+            if not os.path.exists(wp):
+                sys.exit(f"ไม่พบรูป {wp}")
+            entry["with_path"] = cleanup.clean(wp, {}, os.path.join(project_dir, "cache", "cleaned"))
+            entry["with_src"] = (wp, json.dumps({"crop": None, "remove": None}, sort_keys=True))
+        images.append(entry)
     if not images:
         sys.exit(f"ไม่มีรูปในโฟลเดอร์ {img_dir}")
 
@@ -392,10 +488,20 @@ def load_project(project_dir, style_override=None, upscale_images=True):
         if upscale.available():
             for img in images:
                 img["path"] = upscale.upscale(img["path"], cache_dir=os.path.join(project_dir, "cache", "upscaled"))
+                if img.get("with_path"):
+                    img["with_path"] = upscale.upscale(img["with_path"], cache_dir=os.path.join(project_dir, "cache", "upscaled"))
         else:
             print(f"  ! ข้ามการขยายรูปด้วย AI: {upscale.status()}")
 
+    # แต่งโทนสีทั้งชุดให้เข้ากัน + โทนประจำสไตล์ ("grade": false = ปิด, "match" = เฉพาะปรับให้เข้าชุด)
+    grade_mode = cfg.get("grade", True)
+    if grade_mode not in (True, False, "all", "match"):
+        sys.exit('grade ต้องเป็น true / false / "match"')
+    grade.grade_images(images, style, grade_mode, os.path.join(project_dir, "cache", "graded"))
+
     cfg["_images"] = images
+    cfg["_motion_cache"] = os.path.join(project_dir, "cache", "motion")
+    load_analysis(cfg)
     cfg["_music"] = optional("music")
     # ไม่ได้กำหนดเพลง → ใช้เพลงประจำสไตล์จาก brand/music/<สไตล์>.mp3 (ตั้ง "music": false เพื่อปิด)
     if not cfg["_music"] and cfg.get("music") is None:
@@ -517,6 +623,12 @@ def timeline(cfg, fmt):
         # แนวตั้ง: เติมภาพเต็มจอเสมอ (ปิดได้ด้วย "vertical_fill": false) / แนวนอน: รูปแนวตั้งวางกลาง + พื้นเบลอ
         "fill": bool(cfg.get("vertical_fill", True)) if vertical else bool(cfg.get("horizontal_fill", False)),
         "transition": th["transition"],
+        # การเปลี่ยนภาพแต่ละรอยต่อ: ตั้ง "transition" ใน config = ใช้แบบเดียว / ไม่ตั้ง = สลับในชุดของสไตล์
+        "transitions": [cfg["transition"]] * max(0, n - 1) if cfg.get("transition")
+        else [th.get("transitions", [th["transition"]])[(k - 1) % len(th.get("transitions", [th["transition"]]))]
+              for k in range(1, n)],
+        "plans": [scene_plan(cfg, img, i) for i, img in enumerate(images)],
+        "animate": bool(cfg.get("animate", True)) and venv_python() is not None,
     }
 
 
@@ -532,20 +644,26 @@ def render(cfg, fmt, out_path, tmpdir):
     outro_start, total = tm["outro_start"], tm["total"]
 
     args = ["ffmpeg", "-hide_banner", "-y", "-loglevel", "error", "-stats"]
-    for img in images:
-        args += ["-i", img["path"]]
+    clips = cfg.get("_clips")  # ภาพเคลื่อนไหวจาก motion.py (ถ้ามี)
+    for i, img in enumerate(images):
+        args += ["-i", clips[i] if clips and clips[i] else img["path"]]
+    args += ["-i", images[-1]["path"]]  # รูปนิ่งของฉากปิด (input ลำดับ n)
     card = tm["intro"] == "card"
-    if card:  # การ์ดเปิด: รูปแรกอีกชุด (input ลำดับ n) ทำเป็นพื้นเบลอ
+    if card:  # การ์ดเปิด: รูปแรกอีกชุด (input ลำดับ n+1) ทำเป็นพื้นเบลอ
         args += ["-i", images[0]["path"]]
     parts = []
-    last = n - 1
-    parts.append(f"[{last}:v]split=2[last_a][last_b]")
     fill = tm["fill"]
+    # ffmpeg อย่างเดียว: แปลงชื่อการเคลื่อนไหวเป็นการซูม/แพนเดิม
+    FALLBACK = {"push": "zoom_in", "pull": "zoom_out", "pan_left": "pan_left", "pan_right": "pan_right", "rise": "zoom_in"}
 
     for i, img in enumerate(images):
-        src = "last_a" if i == last else f"{i}:v"
-        parts.append(build_clip(src, img, W, H, int(round(durs[i] * FPS)), MOTIONS[i % len(MOTIONS)],
-                                th["zoom"], f"c{i}", fill=fill, idx=i))
+        frames = int(round(durs[i] * FPS))
+        if clips and clips[i]:
+            parts.append(f"[{i}:v]setpts=PTS-STARTPTS,fps={FPS},setsar=1,format=yuv420p,"
+                         f"trim=end_frame={frames}[c{i}]")
+        else:
+            parts.append(build_clip(f"{i}:v", img, W, H, frames, FALLBACK[tm["plans"][i]["motion"]],
+                                    th["zoom"], f"c{i}", fill=fill, idx=i))
 
     def blurred(src, frames, label):
         """รูปเบลอ + ปรับแสงตามสไตล์ ยาว frames เฟรม (พื้นของการ์ดเปิด / ฉากปิด)"""
@@ -556,26 +674,26 @@ def render(cfg, fmt, out_path, tmpdir):
     # ฉากปิด: center = รูปสุดท้ายเบลอ + ข้อมูลกลางจอ / split = รูปครึ่งบน + แถบข้อมูลครึ่งล่าง
     half = even(H / 2)
     if tm["outro"] == "split":
-        parts.append(f"[last_b]scale={W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{half},"
+        parts.append(f"[{n}:v]scale={W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{half},"
                      f"loop=loop={frames_out - 1}:size=1,setpts=N/{FPS}/TB,fps={FPS},setsar=1,format=yuv420p[otop]")
         parts.append(f"color=c={panel_color(th)}:s={W}x{H - half}:r={FPS}:d={frames_out / FPS:.3f},"
                      f"format=yuv420p[obot]")
         parts.append(f"[otop][obot]vstack=inputs=2,setsar=1[c{n}]")
     else:
-        parts.append(blurred("last_b", frames_out, f"c{n}"))
+        parts.append(blurred(f"{n}:v", frames_out, f"c{n}"))
 
     # ต่อคลิปด้วย xfade (การ์ดเปิด / ฉากปิดใช้ fade เสมอ)
     prev = "c0"
     if card:
-        parts.append(blurred(f"{n}:v", int(round(tm["intro_dur"] * FPS)), "cin"))
+        parts.append(blurred(f"{n + 1}:v", int(round(tm["intro_dur"] * FPS)), "cin"))
         parts.append(f"[cin][c0]xfade=transition=fade:duration={T}:offset={starts[0]:.3f}[x0]")
         prev = "x0"
     for k in range(1, n + 1):
-        tr = th["transition"] if k < n else "fade"
+        tr = tm["transitions"][k - 1] if k < n else "fade"
         parts.append(f"[{prev}][c{k}]xfade=transition={tr}:duration={T}:offset={starts[k]:.3f}[x{k}]")
         prev = f"x{k}"
     video = prev
-    input_idx = n + (1 if card else 0)
+    input_idx = n + 1 + (1 if card else 0)
 
     # เงาไล่สีด้านบน/ล่าง ให้ข้อความอ่านง่ายโดยไม่ต้องมีกล่อง
     if th["gradient"]:
@@ -836,6 +954,60 @@ def render(cfg, fmt, out_path, tmpdir):
     print(f"✓ เสร็จแล้ว: {out_path}")
 
 
+def animate(cfg, fmt, tmpdir):
+    """สร้างคลิปภาพเคลื่อนไหวของทุกฉากด้วย motion.py (.venv) คืนรายการไฟล์ หรือ None ถ้าใช้ไม่ได้"""
+    py = venv_python()
+    if not cfg.get("animate", True):
+        return None
+    if not py:
+        print("  ! ไม่มี .venv → ใช้การซูม/แพนแบบเดิม (ติดตั้งภาพเคลื่อนไหวตาม README)")
+        return None
+    script = os.path.join(HERE, "motion.py")
+    pairs = [f"{d}::{path}" for _, _, path, d in analysis_targets(cfg)]
+    subprocess.run([py, script, "analyze"] + pairs, check=True)
+    load_analysis(cfg)
+    tm = timeline(cfg, fmt)
+    W, H = tm["W"], tm["H"]
+    clip_dir = os.path.join(os.path.dirname(cfg["_motion_cache"]), "clips")
+    os.makedirs(clip_dir, exist_ok=True)
+    jobs, outs = [], []
+    th = cfg["_theme"]
+    for i, img in enumerate(cfg["_images"]):
+        plan = tm["plans"][i]
+        if not plan["with"] and clip_mode(img, W, H, tm["fill"]) == "fit":
+            outs.append(None)  # รูปแนวตั้งในวิดีโอแนวนอน: วางกลาง + พื้นเบลอ แบบเดิม (ffmpeg)
+            continue
+
+        def pane(path, anim, pl, phase=0.0):
+            return {"image": path, "analysis": (anim or {}).get("dir"), "motion": pl["motion"],
+                    "focus": pl["focus"], "zoom": th["zoom"] * 1.2, "parallax": pl["parallax"],
+                    "water": "water" in pl["effects"], "sky": "sky" in pl["effects"],
+                    "sweep": pl["sweep"], "phase": phase}
+        panes = [pane(img["path"], img.get("anim"), plan)]
+        if plan["with"]:
+            wa = img.get("with_anim") or {}
+            panes.append(pane(plan["with"], wa, {
+                "motion": "pan_left" if plan["motion"] != "pan_left" else "pan_right",
+                "focus": wa.get("focus") or [0.5, 0.5], "parallax": plan["parallax"] if wa.get("depth") else 0.0,
+                "effects": [e for e, ok in (("water", wa.get("water_frac", 0) > 0.03),
+                                            ("sky", wa.get("sky_frac", 0) > 0.08)) if ok],
+                "sweep": False}, phase=1.3))
+        job = {"W": W, "H": H, "fps": FPS, "frames": int(round(tm["durs"][i] * FPS)), "panes": panes,
+               "split": ("v" if tm["vertical"] else "h") if plan["with"] else None,
+               "accent": th["accent_color"], "bg": panel_color(th), "delay": tm["T"] if i else 0.0,
+               "v": MOTION_VERSION}
+        key = hashlib.sha1(json.dumps(job, sort_keys=True).encode()).hexdigest()[:16]
+        job["out"] = os.path.join(clip_dir, f"{key}.mp4")
+        jobs.append(job)
+        outs.append(job["out"])
+    jobs_path = os.path.join(tmpdir, f"motion_{fmt}.json")
+    with open(jobs_path, "w", encoding="utf-8") as f:
+        json.dump(jobs, f)
+    if jobs:
+        subprocess.run([py, script, "render", jobs_path], check=True)
+    return outs
+
+
 def make(project_dir, style=None, fmts=None, skip_existing=False):
     """สร้างวิดีโอของโปรเจกต์ คืนค่ารายการไฟล์ที่ได้"""
     project_dir = os.path.abspath(project_dir)
@@ -857,6 +1029,7 @@ def make(project_dir, style=None, fmts=None, skip_existing=False):
     os.makedirs(tmpdir, exist_ok=True)
     try:
         for fmt, path in jobs:
+            cfg["_clips"] = animate(cfg, fmt, tmpdir)
             render(cfg, fmt, path, tmpdir)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

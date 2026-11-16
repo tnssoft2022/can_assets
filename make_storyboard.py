@@ -25,11 +25,13 @@ FORMAT_NAMES = {"vertical": "แนวตั้ง", "horizontal": "แนวน
 STYLE_NAMES = {"luxury": "หรูหรา", "modern": "ทันสมัย", "minimal": "มินิมอล",
                "bold": "ป้ายเซล", "nature": "ธรรมชาติ", "corporate": "ทางการ", "night": "หรูกลางคืน"}
 MOTION_NAMES = {
-    "zoom_in": "ซูมเข้าช้า ๆ",
-    "zoom_out": "ซูมออกช้า ๆ",
+    "push": "ซูมเข้าหาจุดโฟกัส",
+    "pull": "ซูมออกจากจุดโฟกัส",
     "pan_right": "เลื่อนไปทางขวา",
     "pan_left": "เลื่อนไปทางซ้าย",
+    "rise": "เงยกล้องขึ้น",
 }
+EFFECT_NAMES = {"water": "น้ำกระเพื่อม", "sky": "เมฆเลื่อน"}
 TRANSITION_NAMES = {
     "fade": "เฟด",
     "slideleft": "สไลด์ไปซ้าย",
@@ -38,18 +40,33 @@ TRANSITION_NAMES = {
     "dissolve": "ละลาย",
     "zoomin": "ซูมเข้า",
     "fadeblack": "เฟดผ่านสีดำ",
+    "slideup": "สไลด์ขึ้น",
+    "smoothleft": "เลื่อนนุ่มไปซ้าย",
+    "smoothup": "เลื่อนนุ่มขึ้น",
+    "wipeup": "ปาดขึ้น",
+    "circleopen": "วงกลมเปิด",
 }
 
 
 def camera_text(img, idx, tm):
-    mode = mv.clip_mode(img, tm["W"], tm["H"], tm["fill"])
-    motion = mv.MOTIONS[idx % len(mv.MOTIONS)]
-    if mode == "pan":
-        direction = "ซ้าย → ขวา" if idx % 2 == 0 else "ขวา → ซ้าย"
-        return f"แพนตามความกว้างรูป ({direction})"
-    if mode == "fit":
-        return f"วางรูปกลางจอ + พื้นหลังเบลอ, {MOTION_NAMES[motion]}"
-    return MOTION_NAMES[motion]
+    plan = tm["plans"][idx]
+    if not tm["animate"]:  # ไม่มี .venv: ffmpeg ซูม/แพนแบบเดิม
+        mode = mv.clip_mode(img, tm["W"], tm["H"], tm["fill"])
+        if mode == "pan":
+            direction = "ซ้าย → ขวา" if idx % 2 == 0 else "ขวา → ซ้าย"
+            return f"แพนตามความกว้างรูป ({direction})"
+        return MOTION_NAMES[plan["motion"]]
+    parts = [MOTION_NAMES[plan["motion"]]]
+    if plan["motion"] in ("push", "pull"):
+        parts[0] += f" ({plan['focus'][0]:.2f}, {plan['focus'][1]:.2f})"
+    if plan["parallax"] > 0:
+        parts.append("ภาพมีมิติ 2.5D")
+    parts += [EFFECT_NAMES[e] for e in plan["effects"] if e in EFFECT_NAMES]
+    if plan["sweep"]:
+        parts.append("แสงวิ่งผ่าน")
+    if plan["with"]:
+        parts.append(f"แบ่งจอกับ `{os.path.basename(plan['with'])}`")
+    return ", ".join(parts)
 
 
 def make_thumb(img, idx, tm, out_path, outro=False):
@@ -102,7 +119,8 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
     details = " | ".join(cfg.get("details", []))
     contact = cfg.get("contact", {}) or {}
     style = cfg["_style"]
-    tr = TRANSITION_NAMES.get(tm["transition"], tm["transition"])
+    trs = list(dict.fromkeys(tm["transitions"])) or [tm["transition"]]
+    tr = " / ".join(TRANSITION_NAMES.get(x, x) for x in trs)
     has_vo = any(img.get("voice") for img in images) or bool(cfg.get("_outro_voice"))
     has_script = any(img.get("narration") for img in images) or bool(cfg.get("outro_narration"))
     if has_vo:
@@ -121,7 +139,8 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         f"| ขนาด | {FORMAT_NAMES[fmt]} {tm['W']}×{tm['H']} |",
         f"| สไตล์ | {STYLE_NAMES.get(style, style)} (`{style}`) |",
         f"| ความยาวรวม | **{t(tm['total'])} วินาที** ({tm['n']} ฉากรูป + ฉากปิด {t(tm['D_OUT'])} วินาที) |",
-        f"| ต่อฉาก | อย่างน้อย {tm['D']:g} วินาที (ยาวขึ้นตามเสียงพากย์), เปลี่ยนภาพแบบ{tr} {tm['T']:g} วินาที |",
+        f"| ต่อฉาก | อย่างน้อย {tm['D']:g} วินาที (ยาวขึ้นตามเสียงพากย์), เปลี่ยนภาพแบบ {tr} {tm['T']:g} วินาที |",
+        f"| ภาพเคลื่อนไหว | {'กล้องนุ่ม + 2.5D + เอฟเฟกต์ (motion.py)' if tm['animate'] else 'ซูม/แพน ffmpeg (ไม่มี .venv)'} |",
         f"| เพลง | {os.path.basename(cfg['_music']) if cfg['_music'] else 'ไม่มี (แทร็กเงียบ)'}"
         f"{' (เบาลงอัตโนมัติตอนมีเสียงพากย์)' if cfg['_music'] and has_vo else ''} |",
         f"| เสียงพากย์ | {vo_line} |",
@@ -170,7 +189,8 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
             texts.append(f"ป้าย: {img['caption']}")
         src = img.get("file", os.path.basename(img["path"]))
         cam = camera_text(img, i, tm)
-        nxt = f"<br>→ {tr}" if i < len(images) - 1 else "<br>→ เฟดเข้าฉากปิด"
+        nxt = (f"<br>→ {TRANSITION_NAMES.get(tm['transitions'][i], tm['transitions'][i])}"
+               if i < len(images) - 1 else "<br>→ เฟดเข้าฉากปิด")
         lines.append(
             f"| {i + 1} | ![ฉาก {i + 1}]({thumb_rel}/{thumb}) | {t(start)} – {t(end)} | "
             f"`{cell(src)}`<br>{cam}{nxt} | {cell('<br>'.join(texts)) if texts else '—'} | "
@@ -208,6 +228,7 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         "| ความยาวต่อฉาก / การเปลี่ยนภาพ | `seconds_per_image`, `transition`, `transition_seconds` |",
         "| ความยาวฉากปิด / ข้อมูลติดต่อ | `outro_seconds`, `contact` |",
         "| ตำแหน่งข้อความ / ฉากเปิด / ฉากปิด | `video_layout` (classic/lower/band), `intro` (overlay/card), `outro` (center/split) |",
+        "| การเคลื่อนไหวของแต่ละรูป | `images[].motion` (push/pull/pan_left/pan_right/rise), `focus` [x, y], `effects`, `sweep`, `parallax`, `with` |",
         "",
         f"สร้างวิดีโอจริงตามสตอรี่บอร์ดนี้: `python3 make_video.py <โฟลเดอร์โปรเจกต์> --style {style} {fmt}`",
         "",
