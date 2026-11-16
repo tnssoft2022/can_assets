@@ -81,13 +81,19 @@ def money(text):
         return None
 
 
+def _heading(line):
+    """ชื่อหัวข้อแบบไม่สนช่องว่าง/โคลอนท้าย: 'สถานที่สำคัญใกล้เคียง  :' → 'สถานที่สำคัญใกล้เคียง'"""
+    return line.split(":")[0].strip()
+
+
 def section(lines, start, stops):
-    """บรรทัดหลังหัวข้อ start จนถึงหัวข้อถัดไป"""
-    if start not in lines:
+    """บรรทัดหลังหัวข้อ start จนถึงหัวข้อถัดไป (หัวข้ออาจมี ':' หรือช่องว่างต่อท้าย)"""
+    heads = [_heading(l) for l in lines]
+    if start not in heads:
         return []
-    i = lines.index(start) + 1
+    i = heads.index(start) + 1
     out = []
-    while i < len(lines) and lines[i] not in stops:
+    while i < len(lines) and heads[i] not in stops:
         if lines[i].strip():
             out.append(lines[i].strip())
         i += 1
