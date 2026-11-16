@@ -1,6 +1,5 @@
 # --- ผลลัพธ์ (สร้างใหม่ได้ทุกเมื่อ) ---
-projects/*/output/
-projects/*/cache/
+# โครงการทั้งหมดใน projects/ ไม่เก็บใน git — กันไว้ใน projects/.gitignore
 cache/
 
 # --- โปรแกรมภายนอก (ติดตั้งตาม README) ---

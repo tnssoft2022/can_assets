@@ -39,7 +39,8 @@ python3 auto_video.py 205 --make storyboard --style modern --formats vertical
 | `fonts/` | ฟอนต์ Kanit ตัวปกติ + ตัวหนา (ลิขสิทธิ์ SIL OFL — ใช้เชิงพาณิชย์ได้ฟรี, ดู `fonts/OFL.txt`) |
 | `brand/logo.png` | โลโก้ Uptown Assets (ใส่ให้ทุกวิดีโอและโปสต์อัตโนมัติ) |
 | `brand/brand.json` | สีประจำแบรนด์ของแต่ละสไตล์ |
-| `projects/<รหัส>_<ชื่อ>/` | `config.json` + `output/` (วิดีโอ, รูปโปสต์) ของแต่ละทรัพย์ (สร้างขึ้นเมื่อสั่งทำ) |
+| `projects/<รหัส>_<ชื่อ>/` | `config.json` + `images/` + `output/` (วิดีโอ, รูปโปสต์) ของแต่ละทรัพย์ (สร้างขึ้นเมื่อสั่งทำ) |
+| `projects/.gitignore` | ให้ git ไม่เก็บโครงการใด ๆ ใน `projects/` (config, รูป, cache, output) — เก็บเฉพาะไฟล์นี้ |
 | `settings.json` | ค่าของเครื่องนี้ เช่น ตำแหน่งโฟลเดอร์ทรัพย์ (`source_dir`) — ไม่เก็บใน git |
 | `settings.example.json` | ตัวอย่าง `settings.json` สำหรับคัดลอกไปแก้ |
 | `README.md` | เอกสารนี้ |
