@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>วิดีโอทั้งหมด — Uptown Assets</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1c2230; --mute:#6b7383; --line:#e3e6ec; --acc:#1f6feb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d2128; --ink:#e7eaf0; --mute:#97a0b0; --line:#2c323c; --acc:#4c8dff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:14px/1.5 -apple-system, BlinkMacSystemFont, "Sukhumvit Set", "Noto Sans Thai", sans-serif; }
+  header { position:sticky; top:0; z-index:2; background:var(--bg); border-bottom:1px solid var(--line);
+           padding:14px 20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; }
+  #q { flex:1; min-width:220px; max-width:520px; border:1px solid var(--line); border-radius:8px; padding:8px 12px;
+       font:inherit; background:var(--card); color:var(--ink); }
+  #q:focus { outline:2px solid var(--acc); outline-offset:-1px; }
+  select { font:inherit; border:1px solid var(--line); border-radius:8px; padding:7px 8px; background:var(--card); color:var(--ink); }
+  #count { color:var(--mute); font-size:13px; }
+  main { padding:18px 20px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; display:flex; flex-direction:column; }
+  video { width:100%; aspect-ratio:9/16; object-fit:contain; background:#000; display:block; }
+  .info { padding:10px 12px 12px; display:flex; flex-direction:column; gap:3px; }
+  .title { font-weight:600; font-size:15px; }
+  .loc, .meta { color:var(--mute); font-size:12.5px; }
+  .price { font-weight:600; color:var(--acc); }
+  .links { display:flex; gap:12px; margin-top:6px; font-size:13px; }
+  .links a { color:var(--acc); text-decoration:none; }
+  .links a:hover { text-decoration:underline; }
+  mark { background:#ffe58a; color:inherit; border-radius:2px; }
+  .empty { text-align:center; color:var(--mute); padding:40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>วิดีโอทั้งหมด</h1>
+  <input id="q" type="search" placeholder="ค้นหา ชื่อโครงการ, ทำเล, ราคา, สไตล์, รหัส…" autofocus>
+  <select id="sort">
+    <option value="new">ใหม่สุดก่อน</option>
+    <option value="old">เก่าสุดก่อน</option>
+    <option value="name">ชื่อ ก–ฮ / A–Z</option>
+  </select>
+  <span id="count"></span>
+</header>
+<main>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" hidden></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+let VIDEOS = [];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
+const url = p => "/files/" + p.split("/").map(encodeURIComponent).join("/");
+const norm = s => String(s ?? "").toLowerCase().replace(/[\s_\-–|,.]+/g, " ");
+const hay = v => norm([v.title, v.location, v.price, v.style, v.project, v.file, ...v.details].join(" "));
+function hl(text, terms) {
+  let h = esc(text);
+  for (const t of terms) {
+    if (!t) continue;
+    const re = new RegExp(esc(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    h = h.replace(re, m => `<mark>${m}</mark>`);
+  }
+  return h;
+}
+const fmtDate = t => new Date(t * 1000).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+const fmtSize = b => (b / 1048576).toFixed(1) + " MB";
+
+function render() {
+  const q = norm($("#q").value).trim();
+  const terms = q.split(" ").filter(Boolean);
+  let list = VIDEOS.filter(v => terms.every(t => v._hay.includes(t)));
+  const mode = $("#sort").value;
+  list.sort(mode === "old" ? (a, b) => a.mtime - b.mtime
+          : mode === "name" ? (a, b) => a.title.localeCompare(b.title, "th")
+          : (a, b) => b.mtime - a.mtime);
+  $("#count").textContent = q ? `พบ ${list.length} จาก ${VIDEOS.length} วิดีโอ` : `${VIDEOS.length} วิดีโอ`;
+  $("#grid").innerHTML = list.map(v => `
+    <div class="card">
+      <video src="${url(v.path)}#t=3" controls preload="metadata" playsinline></video>
+      <div class="info">
+        <div class="title">${hl(v.title, terms)}</div>
+        ${v.location ? `<div class="loc">${hl(v.location, terms)}</div>` : ""}
+        ${v.price ? `<div class="price">${hl(v.price, terms)}</div>` : ""}
+        <div class="meta">${hl(v.style, terms)} · ${fmtDate(v.mtime)} · ${fmtSize(v.size)}</div>
+        <div class="meta">${hl(v.project, terms)}</div>
+        <div class="links">
+          <a href="${url(v.path)}" download="${esc(v.file)}">ดาวน์โหลด</a>
+          ${v.poster ? `<a href="${url(v.poster)}" target="_blank">รูปโปสต์</a>` : ""}
+        </div>
+      </div>
+    </div>`).join("");
+  const empty = $("#empty");
+  empty.hidden = list.length > 0;
+  empty.textContent = VIDEOS.length ? "ไม่พบวิดีโอที่ตรงกับคำค้น" : "ยังไม่มีวิดีโอ";
+}
+// เล่นทีละวิดีโอ
+document.addEventListener("play", e => {
+  document.querySelectorAll("video").forEach(v => { if (v !== e.target) v.pause(); });
+}, true);
+
+async function load() {
+  try {
+    const j = await (await fetch("/api/videos")).json();
+    VIDEOS = j.videos.map(v => ({ ...v, _hay: hay(v) }));
+  } catch { $("#empty").hidden = false; $("#empty").textContent = "เชื่อมต่อเซิร์ฟเวอร์คิวไม่ได้"; return; }
+  render();
+}
+let tm;
+$("#q").addEventListener("input", () => { clearTimeout(tm); tm = setTimeout(render, 120); });
+$("#sort").addEventListener("change", render);
+load();
+</script>
+</body>
+</html>

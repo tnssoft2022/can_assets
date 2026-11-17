@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คิวงาน — Uptown Assets</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1c2230; --mute:#6b7383; --line:#e3e6ec; --acc:#1f6feb;
+          --ok:#1a8f4c; --err:#c93c37; --warn:#b7791f; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d2128; --ink:#e7eaf0; --mute:#97a0b0; --line:#2c323c; --acc:#4c8dff;
+            --ok:#3fbf75; --err:#ef6b66; --warn:#e0a84a; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system, "Sukhumvit Set", "Kanit", sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+  h1 small { font-weight:400; color:var(--mute); font-size:12px; margin-left:auto; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px; }
+  label { display:block; font-size:12px; color:var(--mute); margin:8px 0 4px; }
+  label:first-child { margin-top:0; }
+  textarea { width:100%; border:1px solid var(--line); border-radius:8px; padding:8px; font:inherit;
+             background:var(--bg); color:var(--ink); resize:vertical; }
+  .drop { border:1.5px dashed var(--line); border-radius:8px; padding:10px; text-align:center; color:var(--mute);
+          cursor:pointer; font-size:13px; }
+  .drop.over { border-color:var(--acc); color:var(--acc); }
+  .thumbs { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .thumbs div { position:relative; }
+  .thumbs img { width:58px; height:58px; object-fit:cover; border-radius:6px; display:block; }
+  .thumbs button { position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; border:0;
+                   background:var(--err); color:#fff; font-size:11px; line-height:18px; padding:0; cursor:pointer; }
+  .row { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+  button.btn { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px;
+               padding:6px 12px; font:inherit; cursor:pointer; }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#fff; font-weight:600; }
+  button.danger { color:var(--err); }
+  button:disabled { opacity:.5; cursor:default; }
+  .hint { color:var(--mute); font-size:12px; }
+  select { font:inherit; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:2px 4px; }
+  .msg { color:var(--err); font-size:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:10px; }
+  .card.running { border-color:var(--acc); }
+  .head { display:flex; gap:8px; align-items:flex-start; }
+  .title { font-weight:600; word-break:break-all; flex:1; }
+  .title a { color:inherit; }
+  .badge { font-size:11px; padding:1px 8px; border-radius:20px; white-space:nowrap; border:1px solid currentColor; }
+  .b-queued { color:var(--mute); } .b-running,.b-cancelling { color:var(--acc); }
+  .b-done { color:var(--ok); } .b-error { color:var(--err); } .b-cancelled { color:var(--warn); }
+  .sub { color:var(--mute); font-size:12px; margin-top:2px; white-space:pre-wrap; }
+  ol.steps { list-style:none; padding:0; margin:10px 0 0; display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:4px 10px; }
+  ol.steps li { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--mute); }
+  ol.steps li.done { color:var(--ink); }
+  ol.steps li.cur { color:var(--acc); font-weight:600; }
+  ol.steps li.fail { color:var(--err); font-weight:600; }
+  .ic { width:16px; height:16px; border-radius:50%; border:1.5px solid currentColor; display:inline-flex;
+        align-items:center; justify-content:center; font-size:10px; flex:none; }
+  li.done .ic { background:var(--ok); border-color:var(--ok); color:#fff; }
+  li.cur .ic { border-color:var(--acc); border-top-color:transparent; animation:spin .8s linear infinite; }
+  li.fail .ic { background:var(--err); border-color:var(--err); color:#fff; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .bar { height:4px; background:var(--line); border-radius:4px; margin-top:10px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--acc); transition:width .4s; }
+  .card.done .bar i { background:var(--ok); }
+  .err { color:var(--err); font-size:12px; margin-top:8px; white-space:pre-wrap; }
+  .last { font-size:12px; color:var(--mute); margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  details { margin-top:8px; font-size:12px; }
+  details pre { white-space:pre-wrap; max-height:220px; overflow:auto; background:var(--bg); padding:8px; border-radius:6px; margin:6px 0 0; }
+  .out { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .out video, .out img { max-height:320px; max-width:100%; border-radius:8px; background:#000; }
+  .summary { white-space:pre-wrap; font-size:13px; margin-top:10px; padding:8px; background:var(--bg); border-radius:6px; }
+  .acts { display:flex; gap:6px; }
+  .empty { text-align:center; color:var(--mute); padding:24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>คิวงานสร้างวิดีโอ / โปสต์ <small id="stat"></small>
+    <button class="btn" id="allvids" style="margin-left:auto" title="เปิดในหน้าต่างใหม่">วิดีโอทั้งหมด</button></h1>
+
+  <div class="box">
+    <label for="urls">ลิงก์ uptownassets.com (หลายลิงก์ได้ — บรรทัดละ 1 ลิงก์ = 1 รายการ)</label>
+    <textarea id="urls" rows="3" placeholder="https://www.uptownassets.com/en/project/..."></textarea>
+
+    <label>รูปภาพ (ไม่บังคับ — สำหรับทรัพย์ที่ไม่มีลิงก์ หรือรูปเพิ่มเติม · รูปทั้งหมดรวมเป็น 1 รายการ)</label>
+    <div class="drop" id="drop">ลากรูปมาวาง หรือคลิกเพื่อเลือก</div>
+    <input type="file" id="file" accept="image/*" multiple hidden>
+    <div class="thumbs" id="thumbs"></div>
+
+    <label for="notes">ข้อมูลเพิ่มเติม (ไม่บังคับ — ชื่อ, ทำเล, ราคา, เบอร์, สไตล์ที่ต้องการ ฯลฯ)</label>
+    <textarea id="notes" rows="3" placeholder="เช่น ราคา 3.5 ล้าน · ใช้สไตล์ night"></textarea>
+
+    <div class="row">
+      <button class="btn primary" id="add">เพิ่มเข้าคิว</button>
+      <span class="hint">ทำพร้อมกัน
+        <select id="parallel"><option>1</option><option>2</option><option>3</option></select> รายการ</span>
+      <span class="msg" id="msg"></span>
+    </div>
+  </div>
+
+  <div id="list"></div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let STEPS = [], images = [], openLogs = new Set(), cache = {};
+$("#allvids").onclick = () => window.open("/videos", "uptown-videos", "width=1280,height=900");
+
+// ---------- รูป ----------
+function addFiles(files) {
+  for (const f of files) {
+    if (!f.type.startsWith("image/")) continue;
+    const r = new FileReader();
+    r.onload = () => { images.push({ name: f.name, data: r.result }); drawThumbs(); };
+    r.readAsDataURL(f);
+  }
+}
+function drawThumbs() {
+  $("#thumbs").innerHTML = images.map((im, i) =>
+    `<div><img src="${im.data}"><button title="เอาออก" onclick="images.splice(${i},1);drawThumbs()">×</button></div>`).join("");
+}
+const drop = $("#drop");
+drop.onclick = () => $("#file").click();
+$("#file").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); };
+document.addEventListener("paste", e => { if (e.clipboardData.files.length) addFiles(e.clipboardData.files); });
+
+// ---------- API ----------
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+$("#add").onclick = async () => {
+  $("#msg").textContent = "";
+  $("#add").disabled = true;
+  try {
+    await post("/api/add", { urls: $("#urls").value, notes: $("#notes").value, images });
+    $("#urls").value = ""; $("#notes").value = ""; images = []; drawThumbs();
+    refresh();
+  } catch (e) { $("#msg").textContent = e.message; }
+  $("#add").disabled = false;
+};
+$("#parallel").onchange = e => post("/api/parallel", { parallel: +e.target.value });
+async function act(kind, id) {
+  if (kind === "cancel" && !confirm("ยกเลิกรายการนี้?")) return;
+  try { await post("/api/" + kind, { id }); } catch (e) { alert(e.message); }
+  refresh();
+}
+
+// ---------- แสดงผล ----------
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const LABEL = { queued: "รอคิว", running: "กำลังทำ", cancelling: "กำลังยกเลิก", done: "เสร็จแล้ว",
+                error: "ผิดพลาด", cancelled: "ยกเลิกแล้ว" };
+function ago(t) {
+  if (!t) return "";
+  const s = Math.max(0, Math.round(Date.now() / 1000 - t));
+  return s < 60 ? `${s} วิ` : `${Math.floor(s / 60)} นาที ${s % 60} วิ`;
+}
+function title(it) {
+  if (it.project) return it.project.replace(/^projects\//, "");
+  if (it.url) { const m = it.url.match(/\/(?:project|view)\/([^/?#]+)/); return m ? decodeURIComponent(m[1]) : it.url; }
+  return `รูป ${it.uploads.length} รูป`;
+}
+function card(it) {
+  const st = it.status, n = STEPS.length;
+  const steps = STEPS.map(([k, lab], i) => {
+    let c = "", ic = i + 1;
+    if (st === "done" || i < it.step) { c = "done"; ic = "✓"; }
+    else if (i === it.step || (it.step < 0 && i === 0)) {
+      if (st === "running" || st === "cancelling") { c = "cur"; ic = ""; }
+      else if (st === "error") { c = "fail"; ic = "!"; }
+    }
+    return `<li class="${c}"><span class="ic">${ic}</span>${lab}</li>`;
+  }).join("");
+  const pct = st === "done" ? 100 : Math.max(0, it.step) / n * 100 + (st === "running" ? 100 / n / 2 : 0);
+  const sub = [it.url && it.project ? it.url : "", it.notes,
+    it.worker === "agent" ? "ทำโดย subagent ในแชท" + (["error", "cancelled"].includes(st) ? " · ลองใหม่: สั่งในแชท" : "") : ""]
+    .filter(Boolean).join("\n");
+  const acts = [];
+  if (st === "queued" || st === "running") acts.push(`<button class="btn danger" onclick="act('cancel','${it.id}')">ยกเลิก</button>`);
+  if ((st === "error" || st === "cancelled") && it.worker !== "agent") acts.push(`<button class="btn" onclick="act('retry','${it.id}')">ลองใหม่</button>`);
+  if (!["running", "cancelling"].includes(st)) acts.push(`<button class="btn" title="ลบออกจากรายการ (ไฟล์งานยังอยู่)" onclick="act('remove','${it.id}')">ลบ</button>`);
+  const last = it.log.length && (st === "running" || st === "cancelling") ? it.log[it.log.length - 1].text : "";
+  const o = it.outputs || {};
+  const out = st === "done" ? `<div class="out">
+      ${o.poster ? `<a href="/files/${o.poster}" target="_blank"><img src="/files/${o.poster}"></a>` : ""}
+      ${o.video ? `<video src="/files/${o.video}" controls preload="metadata"></video>` : ""}
+    </div>` : "";
+  const summary = st === "done" && it.summary
+    ? `<div class="summary">${esc(it.summary.replace(/@@\w+[^\n]*\n?/g, "").trim())}</div>` : "";
+  const open = openLogs.has(it.id) ? "open" : "";
+  return `<div class="card ${st}" id="c-${it.id}">
+    <div class="head">
+      <div class="title">${it.url ? `<a href="${esc(it.url)}" target="_blank">${esc(title(it))}</a>` : esc(title(it))}
+        ${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>
+      <span class="badge b-${st}">${LABEL[st] || st}${st === "running" ? " · " + ago(it.started) : ""}</span>
+      <div class="acts">${acts.join("")}</div>
+    </div>
+    <ol class="steps">${steps}</ol>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    ${last ? `<div class="last">${esc(last)}</div>` : ""}
+    ${it.error && st === "error" ? `<div class="err">${esc(it.error)}</div>` : ""}
+    ${out}${summary}
+    ${it.log.length ? `<details ${open} ontoggle="this.open?openLogs.add('${it.id}'):openLogs.delete('${it.id}')">
+      <summary>บันทึกการทำงาน (${it.log.length})</summary>
+      <pre>${esc(it.log.map(l => l.text).join("\n"))}</pre></details>` : ""}
+  </div>`;
+}
+async function refresh() {
+  let j;
+  try { j = await (await fetch("/api/items")).json(); } catch { $("#stat").textContent = "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"; return; }
+  STEPS = j.steps;
+  if (document.activeElement !== $("#parallel")) $("#parallel").value = j.parallel;
+  const items = j.items;  // เก่าสุดอยู่บน (เซิร์ฟเวอร์ส่งตามลำดับที่เพิ่ม)
+  const cnt = s => items.filter(i => i.status === s).length;
+  $("#stat").textContent = (j.claude ? "" : "⚠ ไม่พบ claude · ") +
+    `กำลังทำ ${cnt("running")} · รอ ${cnt("queued")} · เสร็จ ${cnt("done")}`;
+  const list = $("#list");
+  if (!items.length) { list.innerHTML = `<div class="empty">ยังไม่มีรายการ — ใส่ลิงก์ด้านบนแล้วกด "เพิ่มเข้าคิว"</div>`; cache = {}; return; }
+  list.querySelector(".empty")?.remove();
+  // วาดใหม่เฉพาะการ์ดที่ข้อมูลเปลี่ยน (วิดีโอที่กำลังเล่นในการ์ดอื่นไม่สะดุด)
+  const ids = new Set(items.map(i => i.id));
+  for (const id in cache) if (!ids.has(id)) { document.getElementById("c-" + id)?.remove(); delete cache[id]; }
+  let prev = null;
+  for (const it of items) {
+    const key = JSON.stringify(it) + (it.status === "running" ? Math.floor(Date.now() / 1000) : "");
+    let el = document.getElementById("c-" + it.id);
+    if (cache[it.id] !== key) {
+      const pre = el?.querySelector("details pre"), top = pre?.scrollTop;
+      const t = document.createElement("div"); t.innerHTML = card(it); const n = t.firstElementChild;
+      if (el) el.replaceWith(n); else list.appendChild(n);
+      if (top != null) { const p2 = n.querySelector("details pre"); if (p2) p2.scrollTop = top; }
+      el = n; cache[it.id] = key;
+    }
+    // ลำดับ: ตามลำดับที่เพิ่ม (เก่าสุดอยู่บน)
+    if (prev ? prev.nextElementSibling !== el : list.firstElementChild !== el) prev ? prev.after(el) : list.prepend(el);
+    prev = el;
+  }
+}
+refresh();
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>

@@ -463,8 +463,10 @@ def load_project(project_dir, style_override=None, upscale_images=True):
             wp = os.path.join(img_dir, it["with"])
             if not os.path.exists(wp):
                 sys.exit(f"ไม่พบรูป {wp}")
-            entry["with_path"] = cleanup.clean(wp, {}, os.path.join(project_dir, "cache", "cleaned"))
-            entry["with_src"] = (wp, json.dumps({"crop": None, "remove": None}, sort_keys=True))
+            # "with_crop" / "with_remove" = ตัดขอบ/ลบลายน้ำของรูปที่สอง (เหมือน crop/remove)
+            wspec = {"crop": it.get("with_crop"), "remove": it.get("with_remove")}
+            entry["with_path"] = cleanup.clean(wp, wspec, os.path.join(project_dir, "cache", "cleaned"))
+            entry["with_src"] = (wp, json.dumps(wspec, sort_keys=True))
         images.append(entry)
     if not images:
         sys.exit(f"ไม่มีรูปในโฟลเดอร์ {img_dir}")
