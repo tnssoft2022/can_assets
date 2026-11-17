@@ -379,9 +379,10 @@ python3 choose.py projects/<โครงการ> --apply --style nature --imag
 
 **เสียงพากย์** (`voice.py`) — จากบท `images[].narration` และ `outro_narration` ใน `config.json`
 
-- สร้างด้วย **Botnoi Voice** (เสียงไทยธรรมชาติ, ใช้แต้มของบัญชี Botnoi — ประมาณ 0.2 แต้ม/ตัวอักษร, 1 ประโยค ≈ 9 แต้ม)
+- สร้างด้วย **Botnoi Voice V4 (Expressive)** (เสียงไทยธรรมชาติ ตัดเสียงหายใจหัว/ท้ายให้, ใช้แต้มของบัญชี Botnoi — ประมาณ 0.2 แต้ม/ตัวอักษร, 1 ประโยค ≈ 12 แต้ม)
   - ใส่ token ใน `settings.json` → `"botnoi_token": "..."` (หรือตัวแปรแวดล้อม `BOTNOI_TOKEN`) — รับ token ที่ https://voice.botnoi.ai/developer/api
-  - ค่าเริ่มต้น: Premium V2 ผู้พูด `"8"` (Ava V2) — ดูรายชื่อผู้พูดทั้งหมด: `python3 voice.py --speakers`
+  - ค่าเริ่มต้น: V4 ผู้พูด `"2"` (Ava) — ดูรายชื่อผู้พูดทั้งหมด: `python3 voice.py --speakers`
+  - ใช้รุ่นเดิม (V2): `"voice": {"version": "v2", "speaker": "8"}` — **เลขผู้พูดแต่ละรุ่นไม่ตรงกัน** (Ava = 2 ใน V4, = 8 ใน V2)
 - สำรอง (ใช้เมื่อไม่มี token / แต้มหมด / ไม่มีเน็ต — ระบบแจ้ง `! สร้างเสียงด้วย botnoi ไม่ได้`):
   **edge-tts** (ฟรี, ติดตั้ง `python3 -m pip install edge-tts`, เสียง `th-TH-PremwadeeNeural` / `th-TH-NiwatNeural`)
   → คำสั่ง `say` ของ macOS เสียง **Kanya** → ไม่มีเลย = ข้ามเสียงพากย์ (แจ้ง `! ข้ามเสียงพากย์`)
@@ -390,7 +391,7 @@ python3 choose.py projects/<โครงการ> --apply --style nature --imag
 - **ความยาวแต่ละฉากปรับตามเสียงพากย์** (อย่างน้อยเท่าค่าของสไตล์) — พูดจบก่อนเปลี่ยนภาพเสมอ / ฉากปิดยาวขึ้นตามบทฉากปิด
 - ชื่อภาษาอังกฤษควรเขียนเป็นคำอ่านไทยในบท เช่น "พีเพิล พาร์ค", "อัพทาวน์ แอสเซ็ทส์"
 - เก็บไฟล์เสียงไว้ใน `projects/<โครงการ>/cache/voice/` (สร้างใหม่เมื่อบทเปลี่ยน)
-- ทดลองฟัง: `python3 voice.py "ข้อความที่ต้องการฟัง"` / ผู้พูดอื่น `--speaker 13` / edge `--engine edge --voice th-TH-NiwatNeural` / เสียงเดิม `--engine say`
+- ทดลองฟัง: `python3 voice.py "ข้อความที่ต้องการฟัง"` / ผู้พูดอื่น `--speaker 31` / เทียบ V2 `--version v2 --speaker 8` / edge `--engine edge --voice th-TH-NiwatNeural` / เสียงเดิม `--engine say`
 
 **เพลงประกอบ**
 
@@ -519,7 +520,7 @@ projects/<รหัส>_<ชื่อ>/output/storyboard/<สไตล์>_<ข�
 | `image_dir` | โฟลเดอร์รูป (ถ้าไม่ระบุใช้ `images/`) | |
 | `images[].narration` | บทพากย์ของฉากนั้น (ฉากยาวขึ้นตามเสียง) | `"ครัวพร้อมเครื่องดูดควัน"` |
 | `outro_narration` | บทพากย์ฉากปิด | `"สนใจติดต่อ อัพทาวน์ แอสเซ็ทส์ โทร 064-535-9426"` |
-| `voice` | เสียงพากย์ — Botnoi: `{"speaker": "13", "speed": 1.1}` (speed 0.5–2.0) / edge: `{"engine": "edge", "name": "th-TH-NiwatNeural", "rate": "+10%"}` / macOS: `{"engine": "say", "name": "Kanya", "rate": 200}` | `{"speaker": "8", "speed": 1}` |
+| `voice` | เสียงพากย์ — Botnoi: `{"speaker": "31", "speed": 1.1}` (speed 0.5–2.0, `"version"` v4/v2) / edge: `{"engine": "edge", "name": "th-TH-NiwatNeural", "rate": "+10%"}` / macOS: `{"engine": "say", "name": "Kanya", "rate": 200}` | `{"version": "v4", "speaker": "2", "speed": 1}` |
 | `voiceover` | `false` = ปิดเสียงพากย์ (ยังเก็บบทไว้) | `true` |
 | `music` | ไฟล์เพลง, `false` = ไม่มีเพลง, ไม่ระบุ = เพลงประจำสไตล์ | `"music.mp3"` |
 | `music_volume` | ความดังเพลง (ค่าเริ่มต้น 0.8 / 0.55 ถ้ามีเสียงพากย์) | `0.55` |

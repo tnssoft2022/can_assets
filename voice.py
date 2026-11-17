@@ -5,21 +5,24 @@
 ลำดับที่ใช้ (ตัวแรกที่ใช้ได้):
 1. Botnoi Voice (เสียงไทยธรรมชาติ, เสียค่าแต้ม) — ต้องมี token: ใส่ "botnoi_token" ใน settings.json
    หรือตัวแปรแวดล้อม BOTNOI_TOKEN (รับ token ที่ https://voice.botnoi.ai/developer/api)
-   ค่าเริ่มต้น: Premium V2 ผู้พูด "8" (Ava V2) — ดูรายชื่อผู้พูด: python3 voice.py --speakers
+   ค่าเริ่มต้น: V4 Expressive ผู้พูด "2" (Ava) — ดูรายชื่อผู้พูด: python3 voice.py --speakers
+   (เลขผู้พูดของแต่ละรุ่นไม่ตรงกัน เช่น Ava = "2" ใน V4 แต่ = "8" ใน V2)
 2. edge-tts (เสียง Neural ของ Microsoft, ฟรี) — ติดตั้ง: python3 -m pip install edge-tts
    เสียงไทย: th-TH-PremwadeeNeural (หญิง), th-TH-AcharaNeural (หญิง), th-TH-NiwatNeural (ชาย)
 3. เสียง Kanya ของ macOS (คำสั่ง `say`) — ฟรี ไม่ใช้เน็ต
 ถ้าตัวที่เลือกใช้ไม่ได้ (ไม่มีเน็ต / แต้มหมด) จะใช้ตัวถัดไปแทนและแจ้งเตือน
 
 ตั้งค่าใน config.json (ไม่บังคับ):
-    "voice": {"speaker": "13", "speed": 1.1}                 Botnoi: ผู้พูด / ความเร็ว 0.5–2.0
+    "voice": {"speaker": "31", "speed": 1.1}                 Botnoi: ผู้พูด / ความเร็ว 0.5–2.0
+    "voice": {"version": "v2", "speaker": "8"}                Botnoi รุ่นเดิม (V2)
     "voice": {"engine": "edge", "name": "th-TH-NiwatNeural", "rate": "+10%"}
     "voice": {"engine": "say", "name": "Kanya", "rate": 200}  rate = คำต่อนาที
     "voiceover": false                                        ปิดเสียงพากย์ทั้งวิดีโอ
 
 ทดสอบฟังเสียง:
     python3 voice.py "ทาวน์เฮาส์ 2 ชั้น ให้เช่าเดือนละ ฿15,000"
-    python3 voice.py --speaker 13 "..."                   ลองผู้พูด Botnoi คนอื่น
+    python3 voice.py --speaker 31 "..."                   ลองผู้พูด Botnoi คนอื่น
+    python3 voice.py --version v2 --speaker 8 "..."       เทียบกับ Botnoi V2
     python3 voice.py --engine edge --voice th-TH-NiwatNeural "..."
     python3 voice.py --engine say "..."                   ฟังเสียง macOS แบบเดิม
 """
@@ -37,7 +40,8 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 BOTNOI_API = "https://api-voice.botnoi.ai/openapi/v1"
 DEFAULT_VOICES = {
-    "botnoi": {"version": "v2", "speaker": "8", "speed": 1, "volume": 1},
+    # volume เป็น % (100 = ปกติ) ทุกรุ่น — V1/V2 แปลงเป็น 0.1–2.0 ให้ตอนส่ง
+    "botnoi": {"version": "v4", "speaker": "2", "speed": 1, "volume": 100},
     "edge": {"name": "th-TH-PremwadeeNeural", "rate": "+0%"},
     "say": {"name": "Kanya", "rate": 200},
 }
@@ -87,7 +91,7 @@ def _settings(settings, engine):
                 v[k] = str(val)
             elif k in ("speed", "volume") and isinstance(val, (int, float)):
                 v[k] = val
-            elif k == "version" and val in ("v1", "v2"):
+            elif k == "version" and val in ("v1", "v2", "v4"):
                 v[k] = val
             continue
         if k in ("speaker", "speed", "volume", "version"):
@@ -131,15 +135,21 @@ def _botnoi_request(method, path, body=None, timeout=90):
                 time.sleep(min(float(e.headers.get("Retry-After") or 5 * (attempt + 1)), 60))
                 continue
             msg = {401: "token ไม่ถูกต้อง", 403: "แต้มไม่พอ", 404: "แต้มไม่พอ หรือไม่พบผู้พูด",
-                   422: "ข้อมูลไม่ถูกต้อง หรือข้อความยาวเกิน 500 ตัวอักษร"}.get(e.code, "")
+                   422: "ข้อมูลไม่ถูกต้อง หรือข้อความยาวเกิน (V4 1,000 / V2 500 ตัวอักษร)"}.get(e.code, "")
             raise RuntimeError(f"Botnoi HTTP {e.code} {msg}".strip()) from None
 
 
 def _botnoi(v, spoken, raw):
     global last_points
-    res = _botnoi_request("POST", "/generate_audio_v2" if v["version"] == "v2" else "/generate_audio", {
-        "text": spoken, "speaker": v["speaker"], "volume": v["volume"], "speed": v["speed"],
-        "type_media": "mp3", "save_file": "True", "language": "th"})
+    body = {"text": spoken, "speaker": v["speaker"], "speed": v["speed"],
+            "type_media": "mp3", "save_file": "True", "language": "th"}
+    if v["version"] == "v4":  # Expressive: น้ำเสียงเป็นธรรมชาติกว่า + ตัดเสียงหายใจหัว/ท้าย
+        path = "/generate_audio_v4"
+        body.update(volume=v["volume"], trim_breath=True)
+    else:
+        path = "/generate_audio_v2" if v["version"] == "v2" else "/generate_audio"
+        body["volume"] = v["volume"] / 100 if v["volume"] > 2 else v["volume"]
+    res = _botnoi_request("POST", path, body)
     if not res.get("audio_url"):
         raise RuntimeError(f"Botnoi ไม่ได้ส่งไฟล์เสียงกลับมา: {res}")
     last_points = res.get("point")
@@ -231,23 +241,30 @@ def main():
     ap.add_argument("text", nargs="*")
     ap.add_argument("--engine", choices=["botnoi", "edge", "say"])
     ap.add_argument("--speaker", help="ผู้พูด Botnoi เช่น 8, 13")
-    ap.add_argument("--speakers", action="store_true", help="แสดงรายชื่อผู้พูดภาษาไทยของ Botnoi V2")
+    ap.add_argument("--version", choices=["v1", "v2", "v4"], help="รุ่นของ Botnoi (ค่าเริ่มต้น v4)")
+    ap.add_argument("--speakers", action="store_true", help="แสดงรายชื่อผู้พูดภาษาไทยของ Botnoi (ตาม --version)")
     ap.add_argument("--voice", help="ชื่อเสียง เช่น th-TH-NiwatNeural / Kanya")
     ap.add_argument("--rate", help='ความเร็ว เช่น "+10%%" (edge) / 200 (say)')
     a = ap.parse_args()
     if a.speakers:
         if not botnoi_token():
             sys.exit("ยังไม่มี botnoi_token ใน settings.json")
-        data = _botnoi_request("GET", "/get_speaker_data_v2")
-        rows = data if isinstance(data, list) else data.get("data") or data
-        for sp in rows if isinstance(rows, list) else [rows]:
-            if not isinstance(sp, dict) or str(sp.get("language", "")).lower() != "th":
-                continue
+        rows = _botnoi_request("GET", "/get_speaker_data_v2")  # มีชื่อไทย/เพศ/สไตล์
+        thai = [sp for sp in rows if isinstance(sp, dict) and str(sp.get("language", "")).lower() == "th"]
+        if (a.version or "v4") == "v4":  # รายชื่อ V4 มีแค่ id + ชื่อ → จับคู่ชื่อกับข้อมูลของ V2
+            info = {re.sub(r"[^a-z]", "", sp.get("eng_name", "").lower().replace(" v2", "")): sp for sp in thai}
+            v4 = _botnoi_request("GET", "/get_speaker_data_v4")["data"]["data"]
+            thai = [dict(info[re.sub(r"[^a-z]", "", sp["name"])], speaker_id=sp["id"])
+                    for sp in v4 if re.sub(r"[^a-z]", "", sp["name"]) in info]
+        for sp in thai:
             styles = ", ".join((sp.get("speech_style") or []) + (sp.get("voice_style") or []))
-            print(f'{sp.get("speaker_id"):>4}  {sp.get("eng_name", ""):<18} {sp.get("thai_name", ""):<16} '
+            name = sp.get("eng_name", "").replace(" V2", "")
+            print(f'{sp.get("speaker_id"):>4}  {name:<18} {sp.get("thai_name", "").replace(" V2", ""):<16} '
                   f'{sp.get("gender", ""):<8} {sp.get("age_style", ""):<10} {styles}')
         return
     settings = {}
+    if a.version:
+        settings["version"] = a.version
     if a.speaker:
         settings["speaker"] = a.speaker
     if a.engine:
