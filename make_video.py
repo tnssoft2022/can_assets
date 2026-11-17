@@ -521,7 +521,7 @@ def load_project(project_dir, style_override=None, upscale_images=True):
             if cfg.get("outro_narration"):
                 cfg["_outro_voice"], cfg["_outro_voice_dur"] = voice.synth(cfg["outro_narration"], vdir, cfg.get("voice"))
         else:
-            print("  ! ข้ามเสียงพากย์: ไม่พบคำสั่ง say (ใช้ได้เฉพาะ macOS)")
+            print("  ! ข้ามเสียงพากย์: ไม่พบเครื่องมือสร้างเสียง — ใส่ botnoi_token ใน settings.json หรือติดตั้ง edge-tts")
     cfg["_logo"] = optional("logo")
     # ไม่มีโลโก้ในโปรเจกต์ → ใช้โลโก้บริษัทจาก brand/ (ตั้ง "logo": false เพื่อไม่ใส่โลโก้)
     if not cfg["_logo"] and cfg.get("logo") is None and brand.get("logo"):

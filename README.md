@@ -50,7 +50,7 @@ python3 auto_video.py 205 --make storyboard --style modern --formats vertical
 | `motion.py` | ทำให้รูปเคลื่อนไหว: กล้องนุ่มตามจุดโฟกัส, ภาพ 2.5D, น้ำกระเพื่อม, เมฆเลื่อน, แสงวิ่ง, แบ่งจอ (รันใน `.venv`) |
 | `.venv/` | Python + torch/OpenCV สำหรับ `motion.py` (ไม่เก็บใน git — ติดตั้งตามหัวข้อภาพเคลื่อนไหว) |
 | `cleanup.py` | ลบลายน้ำ / ตัดขอบรูป ตาม `crop` / `remove` ใน `config.json` |
-| `voice.py` | สร้างเสียงพากย์ภาษาไทยจากบท `narration` (macOS `say` เสียง Kanya) |
+| `voice.py` | สร้างเสียงพากย์ภาษาไทยจากบท `narration` (Botnoi Voice / สำรอง: edge-tts, macOS `say`) |
 | `make_music.py` | แต่งเพลงประกอบแต่ละสไตล์ด้วยการสังเคราะห์เสียง → `brand/music/` |
 | `brand/music/<สไตล์>.mp3` | เพลงประกอบประจำสไตล์ (ใช้อัตโนมัติถ้าไม่ได้กำหนด `music`) |
 | `tools/realesrgan/` | โปรแกรม Real-ESRGAN + โมเดลรูปถ่าย (ไม่เก็บใน git) |
@@ -379,13 +379,18 @@ python3 choose.py projects/<โครงการ> --apply --style nature --imag
 
 **เสียงพากย์** (`voice.py`) — จากบท `images[].narration` และ `outro_narration` ใน `config.json`
 
-- สร้างด้วยคำสั่ง `say` ของ macOS เสียง **Kanya** (ฟรี ไม่ใช้เน็ต) / Windows ไม่มี → ข้ามเสียงพากย์ (แจ้ง `! ข้ามเสียงพากย์`)
+- สร้างด้วย **Botnoi Voice** (เสียงไทยธรรมชาติ, ใช้แต้มของบัญชี Botnoi — ประมาณ 0.2 แต้ม/ตัวอักษร, 1 ประโยค ≈ 9 แต้ม)
+  - ใส่ token ใน `settings.json` → `"botnoi_token": "..."` (หรือตัวแปรแวดล้อม `BOTNOI_TOKEN`) — รับ token ที่ https://voice.botnoi.ai/developer/api
+  - ค่าเริ่มต้น: Premium V2 ผู้พูด `"8"` (Ava V2) — ดูรายชื่อผู้พูดทั้งหมด: `python3 voice.py --speakers`
+- สำรอง (ใช้เมื่อไม่มี token / แต้มหมด / ไม่มีเน็ต — ระบบแจ้ง `! สร้างเสียงด้วย botnoi ไม่ได้`):
+  **edge-tts** (ฟรี, ติดตั้ง `python3 -m pip install edge-tts`, เสียง `th-TH-PremwadeeNeural` / `th-TH-NiwatNeural`)
+  → คำสั่ง `say` ของ macOS เสียง **Kanya** → ไม่มีเลย = ข้ามเสียงพากย์ (แจ้ง `! ข้ามเสียงพากย์`)
 - แปลงคำอ่านให้เอง: `฿15,000` → "15,000 บาท", `ตร.ม.` → "ตารางเมตร", `/เดือน` → "ต่อเดือน",
   เบอร์ `064-535-9426` → "ศูนย์หกสี่ ห้าสามห้า เก้าสี่สองหก", `1–3` → "1 ถึง 3"
 - **ความยาวแต่ละฉากปรับตามเสียงพากย์** (อย่างน้อยเท่าค่าของสไตล์) — พูดจบก่อนเปลี่ยนภาพเสมอ / ฉากปิดยาวขึ้นตามบทฉากปิด
 - ชื่อภาษาอังกฤษควรเขียนเป็นคำอ่านไทยในบท เช่น "พีเพิล พาร์ค", "อัพทาวน์ แอสเซ็ทส์"
 - เก็บไฟล์เสียงไว้ใน `projects/<โครงการ>/cache/voice/` (สร้างใหม่เมื่อบทเปลี่ยน)
-- ทดลองฟัง: `python3 voice.py "ข้อความที่ต้องการฟัง"`
+- ทดลองฟัง: `python3 voice.py "ข้อความที่ต้องการฟัง"` / ผู้พูดอื่น `--speaker 13` / edge `--engine edge --voice th-TH-NiwatNeural` / เสียงเดิม `--engine say`
 
 **เพลงประกอบ**
 
@@ -514,7 +519,7 @@ projects/<รหัส>_<ชื่อ>/output/storyboard/<สไตล์>_<ข�
 | `image_dir` | โฟลเดอร์รูป (ถ้าไม่ระบุใช้ `images/`) | |
 | `images[].narration` | บทพากย์ของฉากนั้น (ฉากยาวขึ้นตามเสียง) | `"ครัวพร้อมเครื่องดูดควัน"` |
 | `outro_narration` | บทพากย์ฉากปิด | `"สนใจติดต่อ อัพทาวน์ แอสเซ็ทส์ โทร 064-535-9426"` |
-| `voice` | เสียงพากย์ `{name, rate}` (rate = ความเร็ว คำ/นาที) | `{"name": "Kanya", "rate": 200}` |
+| `voice` | เสียงพากย์ — Botnoi: `{"speaker": "13", "speed": 1.1}` (speed 0.5–2.0) / edge: `{"engine": "edge", "name": "th-TH-NiwatNeural", "rate": "+10%"}` / macOS: `{"engine": "say", "name": "Kanya", "rate": 200}` | `{"speaker": "8", "speed": 1}` |
 | `voiceover` | `false` = ปิดเสียงพากย์ (ยังเก็บบทไว้) | `true` |
 | `music` | ไฟล์เพลง, `false` = ไม่มีเพลง, ไม่ระบุ = เพลงประจำสไตล์ | `"music.mp3"` |
 | `music_volume` | ความดังเพลง (ค่าเริ่มต้น 0.8 / 0.55 ถ้ามีเสียงพากย์) | `0.55` |
@@ -562,8 +567,8 @@ projects/<รหัส>_<ชื่อ>/output/storyboard/<สไตล์>_<ข�
 | "ไม่พบโฟลเดอร์ทรัพย์" | ตั้ง `source_dir` ใน `settings.json` หรือใช้ `--source` |
 | "ไม่พบ ffmpeg" | ติดตั้ง ffmpeg (Mac: `brew install ffmpeg` / Windows: `winget install Gyan.FFmpeg`) แล้วเปิดเทอร์มินัลใหม่ |
 | ภาษาไทยเป็นกล่อง ▯ | ffmpeg ไม่มี harfbuzz — ใช้รุ่น full / ตรวจว่ามีโฟลเดอร์ `fonts/` |
-| ไม่มีเสียงพากย์ | ใส่ `narration` ในรูป / ตรวจว่าไม่ได้ตั้ง `"voiceover": false` / บน Windows ยังไม่รองรับ (ไม่มีคำสั่ง `say`) |
+| ไม่มีเสียงพากย์ | ใส่ `narration` ในรูป / ตรวจว่าไม่ได้ตั้ง `"voiceover": false` / ใส่ `botnoi_token` ใน `settings.json` (หรือติดตั้ง edge-tts) และต่อเน็ต |
 | เสียงพากย์อ่านผิด | เขียนบทเป็นคำอ่านไทย หรือเพิ่มกฎใน `speakable()` ของ `voice.py` / ทดลองฟังด้วย `python3 voice.py "..."` |
-| วิดีโอยาวเกินไป | บทพากย์ยาว → ตัดบทให้สั้นลง หรือเพิ่ม `voice.rate` (เช่น 220) |
+| วิดีโอยาวเกินไป | บทพากย์ยาว → ตัดบทให้สั้นลง หรือเพิ่ม `voice.speed` (เช่น `1.1`) |
 | ไม่มีเพลง | ตรวจว่าไม่ได้ตั้ง `"music": false` และมีไฟล์ `brand/music/<สไตล์>.mp3` (สร้างด้วย `python3 make_music.py`) |
 | โครงการไม่ขึ้น GitHub | ตั้งใจไว้ — `projects/.gitignore` กันทุกโครงการ ให้คัดลอกโฟลเดอร์ `projects/` เองถ้าต้องการย้ายเครื่อง |

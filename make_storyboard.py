@@ -222,7 +222,7 @@ def build_markdown(cfg, fmt, name, thumb_rel, thumb_dir):
         "| เปลี่ยนลำดับ / ตัดรูป | `images` (เรียงตามลำดับฉาก) |",
         "| ข้อความป้ายของแต่ละฉาก | `images[].caption` |",
         "| บทพากย์ของแต่ละฉาก / ฉากปิด | `images[].narration`, `outro_narration` (ฉากยาวขึ้นเองตามเสียง) |",
-        "| ความเร็ว / ปิดเสียงพากย์ | `voice.rate` / `\"voiceover\": false` |",
+        "| ความเร็ว / ปิดเสียงพากย์ | `voice.speed` / `\"voiceover\": false` |",
         "| เพลง | `music` (ไฟล์ หรือ `false`) — ไม่ระบุ = เพลงประจำสไตล์ใน `brand/music/` |",
         "| ชื่อ / ทำเล / ราคา / รายละเอียด | `title`, `location`, `price`, `details` |",
         "| ความยาวต่อฉาก / การเปลี่ยนภาพ | `seconds_per_image`, `transition`, `transition_seconds` |",
